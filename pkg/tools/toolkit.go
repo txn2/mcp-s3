@@ -218,7 +218,11 @@ func (t *Toolkit) wrapHandler(toolName string, handler ToolHandler) ToolHandler 
 	// Create the full processing chain
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		// Create tool context
-		connectionName := OptionalString(request.Params.Arguments, "connection", t.defaultConnection)
+		args, _ := request.Params.Arguments.(map[string]any)
+		connectionName := t.defaultConnection
+		if args != nil {
+			connectionName = OptionalString(args, "connection", t.defaultConnection)
+		}
 		tc := NewToolContext(toolName, connectionName)
 		ctx = WithToolContext(ctx, tc)
 
