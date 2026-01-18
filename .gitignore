@@ -40,4 +40,6 @@ site/
 
 # Build artifacts
 dist/
-mcp-s3
+build/
+/mcp-s3
+NOTES_*
