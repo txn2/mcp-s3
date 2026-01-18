@@ -20,7 +20,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     ./cmd/mcp-s3
 
 # Final stage
-FROM alpine:3.19
+FROM alpine:3.23
 
 # Install CA certificates for HTTPS
 RUN apk add --no-cache ca-certificates
