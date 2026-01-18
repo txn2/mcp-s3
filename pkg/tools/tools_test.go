@@ -376,3 +376,315 @@ func TestIsTextContent(t *testing.T) {
 		})
 	}
 }
+
+func TestGetObjectMetadata(t *testing.T) {
+	mock := NewMockS3Client("test")
+	mock.AddObject("test-bucket", "file.txt", []byte("content"), "text/plain")
+
+	toolkit := NewToolkit(mock)
+
+	t.Run("get metadata success", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Name = ToolGetObjectMetadata
+		req.Params.Arguments = map[string]any{
+			"bucket": "test-bucket",
+			"key":    "file.txt",
+		}
+
+		result, err := toolkit.handleGetObjectMetadata(context.Background(), req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if result.IsError {
+			t.Errorf("unexpected error result: %v", result.Content)
+		}
+	})
+
+	t.Run("missing bucket", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Name = ToolGetObjectMetadata
+		req.Params.Arguments = map[string]any{
+			"key": "file.txt",
+		}
+
+		result, err := toolkit.handleGetObjectMetadata(context.Background(), req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !result.IsError {
+			t.Error("expected error for missing bucket")
+		}
+	})
+
+	t.Run("missing key", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Name = ToolGetObjectMetadata
+		req.Params.Arguments = map[string]any{
+			"bucket": "test-bucket",
+		}
+
+		result, err := toolkit.handleGetObjectMetadata(context.Background(), req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !result.IsError {
+			t.Error("expected error for missing key")
+		}
+	})
+
+	t.Run("object not found", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Name = ToolGetObjectMetadata
+		req.Params.Arguments = map[string]any{
+			"bucket": "test-bucket",
+			"key":    "nonexistent.txt",
+		}
+
+		result, err := toolkit.handleGetObjectMetadata(context.Background(), req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !result.IsError {
+			t.Error("expected error for nonexistent object")
+		}
+	})
+
+	t.Run("with connection", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Name = ToolGetObjectMetadata
+		req.Params.Arguments = map[string]any{
+			"bucket":     "test-bucket",
+			"key":        "file.txt",
+			"connection": "test",
+		}
+
+		result, err := toolkit.handleGetObjectMetadata(context.Background(), req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if result.IsError {
+			t.Errorf("unexpected error result: %v", result.Content)
+		}
+	})
+}
+
+func TestCopyObject_MissingParams(t *testing.T) {
+	mock := NewMockS3Client("test")
+	toolkit := NewToolkit(mock)
+
+	t.Run("missing source_bucket", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{
+			"source_key":  "src.txt",
+			"dest_bucket": "dest",
+			"dest_key":    "dst.txt",
+		}
+
+		result, err := toolkit.handleCopyObject(context.Background(), req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !result.IsError {
+			t.Error("expected error for missing source_bucket")
+		}
+	})
+
+	t.Run("missing source_key", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{
+			"source_bucket": "src",
+			"dest_bucket":   "dest",
+			"dest_key":      "dst.txt",
+		}
+
+		result, err := toolkit.handleCopyObject(context.Background(), req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !result.IsError {
+			t.Error("expected error for missing source_key")
+		}
+	})
+
+	t.Run("missing dest_bucket", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{
+			"source_bucket": "src",
+			"source_key":    "src.txt",
+			"dest_key":      "dst.txt",
+		}
+
+		result, err := toolkit.handleCopyObject(context.Background(), req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !result.IsError {
+			t.Error("expected error for missing dest_bucket")
+		}
+	})
+
+	t.Run("missing dest_key", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{
+			"source_bucket": "src",
+			"source_key":    "src.txt",
+			"dest_bucket":   "dest",
+		}
+
+		result, err := toolkit.handleCopyObject(context.Background(), req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !result.IsError {
+			t.Error("expected error for missing dest_key")
+		}
+	})
+}
+
+func TestPresignURL_InvalidMethod(t *testing.T) {
+	mock := NewMockS3Client("test")
+	toolkit := NewToolkit(mock)
+
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{
+		"bucket": "test-bucket",
+		"key":    "file.txt",
+		"method": "DELETE",
+	}
+
+	result, err := toolkit.handlePresignURL(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !result.IsError {
+		t.Error("expected error for invalid method")
+	}
+}
+
+func TestPresignURL_MissingParams(t *testing.T) {
+	mock := NewMockS3Client("test")
+	toolkit := NewToolkit(mock)
+
+	t.Run("missing bucket", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{
+			"key":    "file.txt",
+			"method": "GET",
+		}
+
+		result, err := toolkit.handlePresignURL(context.Background(), req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !result.IsError {
+			t.Error("expected error for missing bucket")
+		}
+	})
+
+	t.Run("missing key", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{
+			"bucket": "test-bucket",
+			"method": "GET",
+		}
+
+		result, err := toolkit.handlePresignURL(context.Background(), req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !result.IsError {
+			t.Error("expected error for missing key")
+		}
+	})
+}
+
+func TestPutObject_Base64Content(t *testing.T) {
+	mock := NewMockS3Client("test")
+	toolkit := NewToolkit(mock)
+
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{
+		"bucket":       "test-bucket",
+		"key":          "binary.bin",
+		"content":      "SGVsbG8sIFdvcmxkIQ==", // "Hello, World!" in base64
+		"encoding":     "base64",
+		"content_type": "application/octet-stream",
+	}
+
+	result, err := toolkit.handlePutObject(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.IsError {
+		t.Errorf("unexpected error result: %v", result.Content)
+	}
+}
+
+func TestPutObject_MissingParams(t *testing.T) {
+	mock := NewMockS3Client("test")
+	toolkit := NewToolkit(mock)
+
+	t.Run("missing bucket", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{
+			"key":     "file.txt",
+			"content": "hello",
+		}
+
+		result, err := toolkit.handlePutObject(context.Background(), req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !result.IsError {
+			t.Error("expected error for missing bucket")
+		}
+	})
+
+	t.Run("missing key", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{
+			"bucket":  "test-bucket",
+			"content": "hello",
+		}
+
+		result, err := toolkit.handlePutObject(context.Background(), req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !result.IsError {
+			t.Error("expected error for missing key")
+		}
+	})
+
+	t.Run("missing content", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{
+			"bucket": "test-bucket",
+			"key":    "file.txt",
+		}
+
+		result, err := toolkit.handlePutObject(context.Background(), req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !result.IsError {
+			t.Error("expected error for missing content")
+		}
+	})
+}
