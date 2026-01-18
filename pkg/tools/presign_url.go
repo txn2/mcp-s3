@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -60,83 +61,88 @@ func (t *Toolkit) registerPresignURL(s *server.MCPServer) {
 
 // handlePresignURL handles the s3_presign_url tool request.
 func (t *Toolkit) handlePresignURL(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	// Extract arguments
 	args, err := GetArgs(request)
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	// Extract parameters
-	bucket, err := RequireString(args, "bucket")
+	params, err := extractPresignParams(args)
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	key, err := RequireString(args, "key")
+	s3Client, err := t.GetClient(params.connection)
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	method := OptionalString(args, "method", "GET")
-	expiresIn := OptionalInt(args, "expires_in", 3600)
-	connectionName := OptionalString(args, "connection", "")
-
-	// Validate method
-	if method != "GET" && method != "PUT" {
-		return ErrorResultf("invalid method: %s (must be GET or PUT)", method), nil
-	}
-
-	// Validate and cap expiration
-	if expiresIn < 1 {
-		expiresIn = 3600
-	}
-	if expiresIn > 604800 {
-		expiresIn = 604800
-	}
-
-	expires := time.Duration(expiresIn) * time.Second
-
-	// Get client
-	client, err := t.GetClient(connectionName)
+	presigned, err := generatePresignedURL(ctx, s3Client, params)
 	if err != nil {
-		return ErrorResult(err), nil
+		return ErrorResultf("failed to generate presigned URL: %v", err), nil
 	}
 
-	// Generate presigned URL
-	var presigned *presignedURLResult
-	if method == "GET" {
-		url, err := client.PresignGetURL(ctx, bucket, key, expires)
-		if err != nil {
-			return ErrorResultf("failed to generate presigned URL: %v", err), nil
-		}
-		presigned = &presignedURLResult{
-			URL:       url.URL,
-			Method:    url.Method,
-			ExpiresAt: url.ExpiresAt,
-		}
-	} else {
-		url, err := client.PresignPutURL(ctx, bucket, key, expires)
-		if err != nil {
-			return ErrorResultf("failed to generate presigned URL: %v", err), nil
-		}
-		presigned = &presignedURLResult{
-			URL:       url.URL,
-			Method:    url.Method,
-			ExpiresAt: url.ExpiresAt,
-		}
-	}
-
-	// Build result
-	result := PresignURLResult{
-		Bucket:    bucket,
-		Key:       key,
+	return JSONResult(PresignURLResult{
+		Bucket:    params.bucket,
+		Key:       params.key,
 		URL:       presigned.URL,
 		Method:    presigned.Method,
-		ExpiresIn: expiresIn,
+		ExpiresIn: params.expiresIn,
 		ExpiresAt: presigned.ExpiresAt.Format("2006-01-02T15:04:05Z"),
-	}
+	})
+}
 
-	return JSONResult(result)
+type presignParams struct {
+	bucket, key, method, connection string
+	expiresIn                       int
+}
+
+func extractPresignParams(args map[string]any) (*presignParams, error) {
+	bucket, err := RequireString(args, "bucket")
+	if err != nil {
+		return nil, err
+	}
+	key, err := RequireString(args, "key")
+	if err != nil {
+		return nil, err
+	}
+	method := OptionalString(args, "method", "GET")
+	if method != "GET" && method != "PUT" {
+		return nil, fmt.Errorf("invalid method: %s (must be GET or PUT)", method)
+	}
+	expiresIn := clampExpiration(OptionalInt(args, "expires_in", 3600))
+	return &presignParams{
+		bucket:     bucket,
+		key:        key,
+		method:     method,
+		connection: OptionalString(args, "connection", ""),
+		expiresIn:  expiresIn,
+	}, nil
+}
+
+func clampExpiration(expiresIn int) int {
+	if expiresIn < 1 {
+		return 3600
+	}
+	if expiresIn > 604800 {
+		return 604800
+	}
+	return expiresIn
+}
+
+func generatePresignedURL(ctx context.Context, client S3Client, params *presignParams) (*presignedURLResult, error) {
+	expires := time.Duration(params.expiresIn) * time.Second
+	if params.method == "GET" {
+		url, err := client.PresignGetURL(ctx, params.bucket, params.key, expires)
+		if err != nil {
+			return nil, err
+		}
+		return &presignedURLResult{URL: url.URL, Method: url.Method, ExpiresAt: url.ExpiresAt}, nil
+	}
+	url, err := client.PresignPutURL(ctx, params.bucket, params.key, expires)
+	if err != nil {
+		return nil, err
+	}
+	return &presignedURLResult{URL: url.URL, Method: url.Method, ExpiresAt: url.ExpiresAt}, nil
 }
 
 // presignedURLResult is an internal type for holding presigned URL info.
