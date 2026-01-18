@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
+
 	"github.com/txn2/mcp-s3/pkg/tools"
 )
 

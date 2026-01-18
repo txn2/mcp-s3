@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/mark3labs/mcp-go/server"
+
 	mcps3 "github.com/txn2/mcp-s3/internal/server"
 )
 

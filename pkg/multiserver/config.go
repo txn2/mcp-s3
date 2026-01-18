@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"os"
 
-	"github.com/txn2/mcp-s3/pkg/client"
 	"gopkg.in/yaml.v3"
+
+	"github.com/txn2/mcp-s3/pkg/client"
 )
 
 // ConnectionConfig represents configuration for a single S3 connection.
