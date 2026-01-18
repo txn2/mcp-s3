@@ -31,3 +31,10 @@ go.work.sum
 .idea/
 # .vscode/
 settings.local.json
+
+# MkDocs generated site
+site/
+
+# Build artifacts
+dist/
+mcp-s3
