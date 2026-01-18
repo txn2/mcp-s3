@@ -60,20 +60,26 @@ func (t *Toolkit) registerPresignURL(s *server.MCPServer) {
 
 // handlePresignURL handles the s3_presign_url tool request.
 func (t *Toolkit) handlePresignURL(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Extract arguments
+	args, err := GetArgs(request)
+	if err != nil {
+		return ErrorResult(err), nil
+	}
+
 	// Extract parameters
-	bucket, err := RequireString(request.Params.Arguments, "bucket")
+	bucket, err := RequireString(args, "bucket")
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	key, err := RequireString(request.Params.Arguments, "key")
+	key, err := RequireString(args, "key")
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	method := OptionalString(request.Params.Arguments, "method", "GET")
-	expiresIn := OptionalInt(request.Params.Arguments, "expires_in", 3600)
-	connectionName := OptionalString(request.Params.Arguments, "connection", "")
+	method := OptionalString(args, "method", "GET")
+	expiresIn := OptionalInt(args, "expires_in", 3600)
+	connectionName := OptionalString(args, "connection", "")
 
 	// Validate method
 	if method != "GET" && method != "PUT" {
