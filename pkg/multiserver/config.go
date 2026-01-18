@@ -94,7 +94,7 @@ func FromEnvJSON() (*MultiConfig, error) {
 
 // FromYAMLFile loads multi-connection configuration from a YAML file.
 func FromYAMLFile(path string) (*MultiConfig, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //#nosec G304 -- Path is intentionally user-provided config file
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +109,7 @@ func FromYAMLFile(path string) (*MultiConfig, error) {
 
 // FromJSONFile loads multi-connection configuration from a JSON file.
 func FromJSONFile(path string) (*MultiConfig, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //#nosec G304 -- Path is intentionally user-provided config file
 	if err != nil {
 		return nil, err
 	}
