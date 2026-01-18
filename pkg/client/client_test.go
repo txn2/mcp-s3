@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -807,6 +808,95 @@ func TestClient_contextWithTimeout(t *testing.T) {
 		}
 		if time.Until(deadline) > 2*time.Second {
 			t.Error("should respect parent's shorter deadline")
+		}
+	})
+}
+
+func TestClearUnresolvedAWSEnvVars(t *testing.T) {
+	// Save original env vars
+	originalEnv := make(map[string]string)
+	envVars := []string{
+		"AWS_PROFILE",
+		"AWS_ACCESS_KEY_ID",
+		"AWS_SECRET_ACCESS_KEY",
+		"AWS_SESSION_TOKEN",
+		"AWS_REGION",
+	}
+	for _, key := range envVars {
+		if value, exists := os.LookupEnv(key); exists {
+			originalEnv[key] = value
+		}
+	}
+
+	// Restore original env vars after test
+	defer func() {
+		for _, key := range envVars {
+			if value, exists := originalEnv[key]; exists {
+				os.Setenv(key, value)
+			} else {
+				os.Unsetenv(key)
+			}
+		}
+	}()
+
+	t.Run("clears unresolved template vars", func(t *testing.T) {
+		// Set template variables
+		os.Setenv("AWS_PROFILE", "${user_config.aws_profile}")
+		os.Setenv("AWS_ACCESS_KEY_ID", "${user_config.access_key}")
+		os.Setenv("AWS_SECRET_ACCESS_KEY", "${user_config.secret_key}")
+
+		clearUnresolvedAWSEnvVars()
+
+		if got := os.Getenv("AWS_PROFILE"); got != "" {
+			t.Errorf("AWS_PROFILE should be empty, got %q", got)
+		}
+		if got := os.Getenv("AWS_ACCESS_KEY_ID"); got != "" {
+			t.Errorf("AWS_ACCESS_KEY_ID should be empty, got %q", got)
+		}
+		if got := os.Getenv("AWS_SECRET_ACCESS_KEY"); got != "" {
+			t.Errorf("AWS_SECRET_ACCESS_KEY should be empty, got %q", got)
+		}
+	})
+
+	t.Run("preserves valid values", func(t *testing.T) {
+		// Set valid values
+		os.Setenv("AWS_PROFILE", "production")
+		os.Setenv("AWS_REGION", "us-west-2")
+		os.Setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
+
+		clearUnresolvedAWSEnvVars()
+
+		if got := os.Getenv("AWS_PROFILE"); got != "production" {
+			t.Errorf("AWS_PROFILE should be preserved, got %q", got)
+		}
+		if got := os.Getenv("AWS_REGION"); got != "us-west-2" {
+			t.Errorf("AWS_REGION should be preserved, got %q", got)
+		}
+		if got := os.Getenv("AWS_ACCESS_KEY_ID"); got != "AKIAIOSFODNN7EXAMPLE" {
+			t.Errorf("AWS_ACCESS_KEY_ID should be preserved, got %q", got)
+		}
+	})
+
+	t.Run("mixed valid and template vars", func(t *testing.T) {
+		// Mix of template vars and valid values
+		os.Setenv("AWS_PROFILE", "${user_config.aws_profile}")
+		os.Setenv("AWS_REGION", "eu-west-1")
+		os.Setenv("AWS_ACCESS_KEY_ID", "${user_config.key}")
+		os.Setenv("AWS_SECRET_ACCESS_KEY", "valid-secret")
+
+		clearUnresolvedAWSEnvVars()
+
+		if got := os.Getenv("AWS_PROFILE"); got != "" {
+			t.Errorf("AWS_PROFILE should be cleared, got %q", got)
+		}
+		if got := os.Getenv("AWS_REGION"); got != "eu-west-1" {
+			t.Errorf("AWS_REGION should be preserved, got %q", got)
+		}
+		if got := os.Getenv("AWS_ACCESS_KEY_ID"); got != "" {
+			t.Errorf("AWS_ACCESS_KEY_ID should be cleared, got %q", got)
+		}
+		if got := os.Getenv("AWS_SECRET_ACCESS_KEY"); got != "valid-secret" {
+			t.Errorf("AWS_SECRET_ACCESS_KEY should be preserved, got %q", got)
 		}
 	})
 }
