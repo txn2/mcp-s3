@@ -25,7 +25,14 @@ This file provides guidance to Claude Code when working with this project.
 
 4. **Human Review Required**: A human must review and approve every line of code before it is committed. Therefore, commits are always performed by a human, not by Claude.
 
-5. **Go Report Card**: The project MUST always maintain 100% across all categories on [Go Report Card](https://goreportcard.com/).
+5. **Go Report Card**: The project MUST always maintain 100% across all categories on [Go Report Card](https://goreportcard.com/). This includes:
+   - **gofmt**: All code must be formatted with `gofmt`
+   - **go vet**: No issues from `go vet`
+   - **gocyclo**: All functions must have cyclomatic complexity ≤10
+   - **golint**: No lint issues (deprecated but still checked)
+   - **ineffassign**: No ineffectual assignments
+   - **license**: Valid license file present
+   - **misspell**: No spelling errors in comments/strings
 
 6. **Diagrams**: Use Mermaid for all diagrams. Never use ASCII art.
 
