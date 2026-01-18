@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
@@ -75,25 +76,25 @@ func (m *mockS3API) CopyObject(ctx context.Context, params *s3.CopyObjectInput, 
 
 // mockPresignAPI is a mock implementation of PresignAPI for testing.
 type mockPresignAPI struct {
-	presignGetObjectFunc func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.PresignOptions)) (*s3.PresignedHTTPRequest, error)
-	presignPutObjectFunc func(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.PresignOptions)) (*s3.PresignedHTTPRequest, error)
+	presignGetObjectFunc func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
+	presignPutObjectFunc func(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
 }
 
-func (m *mockPresignAPI) PresignGetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.PresignOptions)) (*s3.PresignedHTTPRequest, error) {
+func (m *mockPresignAPI) PresignGetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error) {
 	if m.presignGetObjectFunc != nil {
 		return m.presignGetObjectFunc(ctx, params, optFns...)
 	}
-	return &s3.PresignedHTTPRequest{
+	return &v4.PresignedHTTPRequest{
 		URL:    "https://example.com/presigned",
 		Method: "GET",
 	}, nil
 }
 
-func (m *mockPresignAPI) PresignPutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.PresignOptions)) (*s3.PresignedHTTPRequest, error) {
+func (m *mockPresignAPI) PresignPutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error) {
 	if m.presignPutObjectFunc != nil {
 		return m.presignPutObjectFunc(ctx, params, optFns...)
 	}
-	return &s3.PresignedHTTPRequest{
+	return &v4.PresignedHTTPRequest{
 		URL:    "https://example.com/presigned",
 		Method: "PUT",
 	}, nil
