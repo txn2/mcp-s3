@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -106,11 +107,35 @@ type PresignedURL struct {
 	ExpiresAt time.Time
 }
 
+// clearUnresolvedAWSEnvVars removes AWS environment variables that contain
+// unresolved template variables. This prevents the AWS SDK from trying to
+// use invalid values like "${user_config.aws_profile}" as profile names.
+//
+// The AWS SDK's LoadDefaultConfig automatically reads these env vars,
+// bypassing any application-level configuration.
+func clearUnresolvedAWSEnvVars() {
+	awsEnvVars := []string{
+		"AWS_PROFILE",
+		"AWS_ACCESS_KEY_ID",
+		"AWS_SECRET_ACCESS_KEY",
+		"AWS_SESSION_TOKEN",
+		"AWS_REGION",
+	}
+	for _, key := range awsEnvVars {
+		if value := os.Getenv(key); isUnresolvedTemplateVar(value) {
+			_ = os.Unsetenv(key)
+		}
+	}
+}
+
 // New creates a new S3 client with the given configuration.
 func New(ctx context.Context, cfg *Config) (*Client, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
+
+	// Clear unresolved template variables from AWS env vars before SDK reads them
+	clearUnresolvedAWSEnvVars()
 
 	// Build AWS config options
 	var opts []func(*config.LoadOptions) error
