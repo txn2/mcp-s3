@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.25-alpine AS builder
+FROM golang:1.23-alpine@sha256:f5a7ee6abd197fc4a66a9e31f3a7680af65a34a2efc1ec90cddb36ac0a4f5ee6 AS builder
 
 WORKDIR /app
 
@@ -20,7 +20,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     ./cmd/mcp-s3
 
 # Final stage
-FROM alpine:3.23
+FROM alpine:3.21@sha256:a8560b36e8b8210634f77d9f7f9efd7ffa463e380b75e2e74aff4511df3ef88c
 
 # Install CA certificates for HTTPS
 RUN apk add --no-cache ca-certificates
