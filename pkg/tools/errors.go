@@ -181,3 +181,22 @@ func OptionalBool(args map[string]any, key string, defaultValue bool) bool {
 
 	return b
 }
+
+// OptionalMetadata extracts an optional metadata map from the request arguments.
+func OptionalMetadata(args map[string]any, key string) map[string]string {
+	metaVal, ok := args[key]
+	if !ok {
+		return nil
+	}
+	metaMap, ok := metaVal.(map[string]any)
+	if !ok {
+		return nil
+	}
+	metadata := make(map[string]string)
+	for k, v := range metaMap {
+		if strVal, ok := v.(string); ok {
+			metadata[k] = strVal
+		}
+	}
+	return metadata
+}
