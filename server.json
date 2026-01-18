@@ -1,0 +1,73 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anthropics/mcp-registry/main/schemas/server.schema.json",
+  "name": "mcp-s3",
+  "description": "MCP server for Amazon S3 and S3-compatible object storage. Enables AI assistants to list buckets, browse objects, and read/write files in S3, MinIO, SeaweedFS, and other compatible storage systems.",
+  "repository": "https://github.com/txn2/mcp-s3",
+  "homepage": "https://github.com/txn2/mcp-s3",
+  "license": "Apache-2.0",
+  "categories": ["storage", "cloud", "aws"],
+  "tags": ["s3", "aws", "object-storage", "minio", "seaweedfs", "storage"],
+  "installations": {
+    "claude": {
+      "type": "stdio",
+      "command": "mcp-s3",
+      "env": {
+        "AWS_REGION": "${AWS_REGION}",
+        "AWS_ACCESS_KEY_ID": "${AWS_ACCESS_KEY_ID}",
+        "AWS_SECRET_ACCESS_KEY": "${AWS_SECRET_ACCESS_KEY}"
+      }
+    }
+  },
+  "downloads": {
+    "darwin-amd64": {
+      "url": "https://github.com/txn2/mcp-s3/releases/download/${VERSION}/mcp-s3_${VERSION}_darwin_amd64.mcpb",
+      "sha256": "SHA256_PLACEHOLDER_DARWIN_AMD64"
+    },
+    "darwin-arm64": {
+      "url": "https://github.com/txn2/mcp-s3/releases/download/${VERSION}/mcp-s3_${VERSION}_darwin_arm64.mcpb",
+      "sha256": "SHA256_PLACEHOLDER_DARWIN_ARM64"
+    },
+    "windows-amd64": {
+      "url": "https://github.com/txn2/mcp-s3/releases/download/${VERSION}/mcp-s3_${VERSION}_windows_amd64.mcpb",
+      "sha256": "SHA256_PLACEHOLDER_WINDOWS_AMD64"
+    }
+  },
+  "tools": [
+    {
+      "name": "s3_list_buckets",
+      "description": "List accessible S3 buckets"
+    },
+    {
+      "name": "s3_list_objects",
+      "description": "List objects with prefix, delimiter, and pagination support"
+    },
+    {
+      "name": "s3_get_object",
+      "description": "Retrieve object content from S3"
+    },
+    {
+      "name": "s3_get_object_metadata",
+      "description": "Get object metadata without downloading content (HEAD request)"
+    },
+    {
+      "name": "s3_put_object",
+      "description": "Upload object to S3 (blocked by default in read-only mode)"
+    },
+    {
+      "name": "s3_delete_object",
+      "description": "Delete object from S3 (blocked by default in read-only mode)"
+    },
+    {
+      "name": "s3_copy_object",
+      "description": "Copy object within or between buckets"
+    },
+    {
+      "name": "s3_presign_url",
+      "description": "Generate presigned GET or PUT URLs"
+    },
+    {
+      "name": "s3_list_connections",
+      "description": "List configured S3 connections"
+    }
+  ]
+}

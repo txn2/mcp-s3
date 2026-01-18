@@ -10,7 +10,7 @@ All notable changes to mcp-s3 are documented in this file and in detailed releas
 
 ## Release Notes
 
-Detailed release notes for each version will be available in the [docs/changelog](docs/changelog/) directory.
+Detailed release notes for each version are available on the [GitHub Releases](https://github.com/txn2/mcp-s3/releases) page.
 
 ## Versioning
 
