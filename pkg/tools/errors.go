@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/mark3labs/mcp-go/mcp"
 )
@@ -208,7 +209,15 @@ func OptionalInt(args map[string]any, key string, defaultValue int) int {
 
 // OptionalInt32 extracts an optional int32 parameter from the request arguments.
 func OptionalInt32(args map[string]any, key string, defaultValue int32) int32 {
-	return int32(OptionalInt(args, key, int(defaultValue)))
+	v := OptionalInt(args, key, int(defaultValue))
+	// Clamp to int32 range to prevent overflow
+	if v > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	if v < math.MinInt32 {
+		return math.MinInt32
+	}
+	return int32(v)
 }
 
 // OptionalBool extracts an optional boolean parameter from the request arguments.
