@@ -141,11 +141,10 @@ docker_signs:
 
 brews:
   - name: mcp-s3
-    skip_upload: auto
     repository:
       owner: txn2
       name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     directory: Formula
     homepage: https://github.com/txn2/mcp-s3
     description: MCP server for Amazon S3 and S3-compatible storage

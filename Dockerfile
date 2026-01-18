@@ -1,40 +1,16 @@
-# Build stage
-FROM golang:1.23-alpine@sha256:383395b794dffa5b53012a212365d40c8e37109a626ca30d6151c8348d380b5f AS builder
+# syntax=docker/dockerfile:1
 
-WORKDIR /app
+FROM alpine:3.21
 
-# Install dependencies
-RUN apk add --no-cache git ca-certificates
-
-# Copy go mod files first for caching
-COPY go.mod go.sum ./
-RUN go mod download
-
-# Copy source code
-COPY . .
-
-# Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags="-s -w -X github.com/txn2/mcp-s3/internal/server.Version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)" \
-    -o /mcp-s3 \
-    ./cmd/mcp-s3
-
-# Final stage
-FROM alpine:3.21@sha256:5405e8f36ce1878720f71217d664aa3dea32e5e5df11acbf07fc78ef5661465b
-
-# Install CA certificates for HTTPS
+# Install ca-certificates for TLS connections
 RUN apk add --no-cache ca-certificates
 
-# Create non-root user
-RUN adduser -D -g '' mcp
+# Copy the binary from goreleaser (multi-arch build context)
+ARG TARGETARCH
+COPY linux/${TARGETARCH}/mcp-s3 /usr/local/bin/mcp-s3
+
+# Run as non-root user
+RUN adduser -D -u 1000 mcp
 USER mcp
 
-# Copy binary from builder
-COPY --from=builder /mcp-s3 /usr/local/bin/mcp-s3
-
-# Set default environment
-ENV AWS_REGION=us-east-1
-ENV MCP_S3_EXT_READONLY=true
-
-# Run the server
 ENTRYPOINT ["/usr/local/bin/mcp-s3"]
