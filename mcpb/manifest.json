@@ -96,6 +96,13 @@
     }
   ],
   "user_config": {
+    "s3_connection_name": {
+      "type": "string",
+      "title": "Connection Name",
+      "description": "Display name for this connection (e.g., 'production', 'staging')",
+      "required": false,
+      "default": "s3"
+    },
     "aws_region": {
       "type": "string",
       "title": "AWS Region",
@@ -148,13 +155,6 @@
       "description": "Block write operations (put, delete) for safety",
       "required": false,
       "default": true
-    },
-    "s3_connection_name": {
-      "type": "string",
-      "title": "Connection Name",
-      "description": "Display name for this connection (e.g., 'production', 'staging')",
-      "required": false,
-      "default": "s3"
     },
     "s3_additional_connections": {
       "type": "string",
