@@ -1,0 +1,46 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: false
+
+linters:
+  default: standard
+  enable:
+    - misspell
+    - unconvert
+    - nakedret
+    - prealloc
+    - bodyclose
+  disable:
+    - gosec
+    - gocritic
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: false
+  govet:
+    enable-all: true
+  misspell:
+    locale: US
+  nakedret:
+    max-func-lines: 30
+  prealloc:
+    simple: true
+    range-loops: true
+    for-loops: true
+
+formatters-settings:
+  goimports:
+    local-prefixes:
+      - github.com/txn2/mcp-s3
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
