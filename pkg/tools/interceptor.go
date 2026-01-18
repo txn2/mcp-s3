@@ -108,8 +108,15 @@ func (c *InterceptorChain) Intercept(ctx context.Context, tc *ToolContext, reque
 		}
 	}
 
-	// All interceptors passed
-	if currentReq.Params.Name != request.Params.Name || len(currentReq.Params.Arguments) != len(request.Params.Arguments) {
+	// All interceptors passed - check if request was modified
+	if currentReq.Params.Name != request.Params.Name {
+		return AllowedWithModification(&currentReq)
+	}
+
+	// Check if arguments were modified by comparing the pointers
+	currentArgs, _ := currentReq.Params.Arguments.(map[string]any)
+	originalArgs, _ := request.Params.Arguments.(map[string]any)
+	if currentArgs != nil && originalArgs != nil && len(currentArgs) != len(originalArgs) {
 		return AllowedWithModification(&currentReq)
 	}
 

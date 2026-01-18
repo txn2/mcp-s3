@@ -46,14 +46,16 @@ func (m *LoggingMiddleware) Wrap(next tools.ToolHandler) tools.ToolHandler {
 		}
 
 		// Add relevant arguments (excluding sensitive data)
-		if bucket, ok := request.Params.Arguments["bucket"].(string); ok {
-			attrs = append(attrs, "bucket", bucket)
-		}
-		if key, ok := request.Params.Arguments["key"].(string); ok {
-			attrs = append(attrs, "key", key)
-		}
-		if prefix, ok := request.Params.Arguments["prefix"].(string); ok {
-			attrs = append(attrs, "prefix", prefix)
+		if args, ok := request.Params.Arguments.(map[string]any); ok {
+			if bucket, ok := args["bucket"].(string); ok {
+				attrs = append(attrs, "bucket", bucket)
+			}
+			if key, ok := args["key"].(string); ok {
+				attrs = append(attrs, "key", key)
+			}
+			if prefix, ok := args["prefix"].(string); ok {
+				attrs = append(attrs, "prefix", prefix)
+			}
 		}
 
 		// Log request start

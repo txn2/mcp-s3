@@ -116,6 +116,16 @@ func BinaryResult(data []byte, mimeType string) *mcp.CallToolResult {
 	}
 }
 
+// GetArgs extracts the arguments map from the request.
+// Returns an error if the arguments are not a map.
+func GetArgs(request mcp.CallToolRequest) (map[string]any, error) {
+	args, ok := request.Params.Arguments.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%w: arguments must be an object", ErrInvalidParameter)
+	}
+	return args, nil
+}
+
 // RequireString extracts a required string parameter from the request arguments.
 // Returns an error if the parameter is missing or not a string.
 func RequireString(args map[string]any, key string) (string, error) {
