@@ -319,18 +319,49 @@ func TestManager_ClientProvider(t *testing.T) {
 }
 
 func TestManager_DefaultConnectionName(t *testing.T) {
-	cfg := &MultiConfig{
-		DefaultConnection: "my-default",
-		Connections: []ConnectionConfig{
-			{Name: "my-default"},
-		},
-	}
+	t.Run("explicit default", func(t *testing.T) {
+		cfg := &MultiConfig{
+			DefaultConnection: "my-default",
+			Connections: []ConnectionConfig{
+				{Name: "my-default"},
+			},
+		}
 
-	manager := NewManager(cfg)
+		manager := NewManager(cfg)
 
-	if manager.DefaultConnectionName() != "my-default" {
-		t.Errorf("DefaultConnectionName() = %q, want %q", manager.DefaultConnectionName(), "my-default")
-	}
+		if manager.DefaultConnectionName() != "my-default" {
+			t.Errorf("DefaultConnectionName() = %q, want %q", manager.DefaultConnectionName(), "my-default")
+		}
+	})
+
+	t.Run("no default uses first connection", func(t *testing.T) {
+		cfg := &MultiConfig{
+			DefaultConnection: "",
+			Connections: []ConnectionConfig{
+				{Name: "first-conn"},
+				{Name: "second-conn"},
+			},
+		}
+
+		manager := NewManager(cfg)
+
+		if manager.DefaultConnectionName() != "first-conn" {
+			t.Errorf("DefaultConnectionName() = %q, want %q", manager.DefaultConnectionName(), "first-conn")
+		}
+	})
+
+	t.Run("no default no connections returns empty", func(t *testing.T) {
+		cfg := &MultiConfig{
+			DefaultConnection: "",
+			Connections:       []ConnectionConfig{},
+		}
+
+		manager := NewManager(cfg)
+
+		if manager.DefaultConnectionName() != "" {
+			t.Errorf("DefaultConnectionName() = %q, want empty string", manager.DefaultConnectionName())
+		}
+	})
 }
 
 func TestFromEnvJSON(t *testing.T) {
