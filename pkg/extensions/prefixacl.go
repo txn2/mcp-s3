@@ -29,8 +29,14 @@ func (i *PrefixACLInterceptor) Name() string {
 
 // Intercept checks if the requested key prefix is allowed.
 func (i *PrefixACLInterceptor) Intercept(ctx context.Context, tc *tools.ToolContext, request mcp.CallToolRequest) tools.InterceptResult {
+	// Get arguments
+	args, ok := request.Params.Arguments.(map[string]any)
+	if !ok {
+		return tools.Allowed()
+	}
+
 	// Get the key from the request
-	key := i.extractKey(tc.ToolName, request.Params.Arguments)
+	key := i.extractKey(tc.ToolName, args)
 	if key == "" {
 		return tools.Allowed()
 	}
