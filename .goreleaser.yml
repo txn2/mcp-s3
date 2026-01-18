@@ -141,6 +141,7 @@ docker_signs:
 
 brews:
   - name: mcp-s3
+    skip_upload: auto
     repository:
       owner: txn2
       name: homebrew-tap
