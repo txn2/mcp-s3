@@ -44,12 +44,17 @@ func (i *SizeLimitInterceptor) Intercept(ctx context.Context, tc *tools.ToolCont
 		return tools.Allowed()
 	}
 
-	content, ok := request.Params.Arguments["content"].(string)
+	args, ok := request.Params.Arguments.(map[string]any)
 	if !ok {
 		return tools.Allowed()
 	}
 
-	isBase64 := tools.OptionalBool(request.Params.Arguments, "is_base64", false)
+	content, ok := args["content"].(string)
+	if !ok {
+		return tools.Allowed()
+	}
+
+	isBase64 := tools.OptionalBool(args, "is_base64", false)
 
 	var size int64
 	if isBase64 {
