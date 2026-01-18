@@ -26,9 +26,6 @@ var (
 	// ErrConnectionNotFound is returned when a requested connection doesn't exist.
 	ErrConnectionNotFound = errors.New("connection not found")
 
-	// ErrAccessDenied is returned when access to a resource is denied.
-	ErrAccessDenied = errors.New("access denied")
-
 	// ErrNotFound is returned when a requested resource doesn't exist.
 	ErrNotFound = errors.New("resource not found")
 )
@@ -71,11 +68,6 @@ func TextResult(text string) *mcp.CallToolResult {
 	}
 }
 
-// TextResultf creates an MCP CallToolResult with a formatted text message.
-func TextResultf(format string, args ...any) *mcp.CallToolResult {
-	return TextResult(fmt.Sprintf(format, args...))
-}
-
 // JSONResult creates an MCP CallToolResult with JSON-encoded data.
 func JSONResult(data any) (*mcp.CallToolResult, error) {
 	jsonBytes, err := json.MarshalIndent(data, "", "  ")
@@ -91,30 +83,6 @@ func JSONResult(data any) (*mcp.CallToolResult, error) {
 			},
 		},
 	}, nil
-}
-
-// MustJSONResult creates an MCP CallToolResult with JSON-encoded data.
-// Panics if marshaling fails.
-func MustJSONResult(data any) *mcp.CallToolResult {
-	result, err := JSONResult(data)
-	if err != nil {
-		panic(err)
-	}
-	return result
-}
-
-// BinaryResult creates an MCP CallToolResult with binary/blob content as base64.
-func BinaryResult(data []byte, mimeType string) *mcp.CallToolResult {
-	// Use TextContent with base64-encoded data since BlobResourceContents
-	// is not directly usable as Content in tool results
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			mcp.TextContent{
-				Type: "text",
-				Text: fmt.Sprintf("data:%s;base64,%s", mimeType, string(data)),
-			},
-		},
-	}
 }
 
 // GetArgs extracts the arguments map from the request.
@@ -161,28 +129,6 @@ func OptionalString(args map[string]any, key string, defaultValue string) string
 	}
 
 	return str
-}
-
-// RequireInt extracts a required integer parameter from the request arguments.
-// Returns an error if the parameter is missing or not a number.
-func RequireInt(args map[string]any, key string) (int, error) {
-	val, ok := args[key]
-	if !ok {
-		return 0, fmt.Errorf("%w: %s", ErrMissingParameter, key)
-	}
-
-	switch v := val.(type) {
-	case int:
-		return v, nil
-	case int32:
-		return int(v), nil
-	case int64:
-		return int(v), nil
-	case float64:
-		return int(v), nil
-	default:
-		return 0, fmt.Errorf("%w: %s must be a number", ErrInvalidParameter, key)
-	}
 }
 
 // OptionalInt extracts an optional integer parameter from the request arguments.
