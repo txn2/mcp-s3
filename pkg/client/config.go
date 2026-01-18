@@ -4,6 +4,7 @@ package client
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -63,14 +64,14 @@ type Config struct {
 func FromEnv() Config {
 	cfg := Config{
 		Region:          getEnvOrDefault("AWS_REGION", DefaultRegion),
-		Endpoint:        os.Getenv("S3_ENDPOINT"),
-		AccessKeyID:     os.Getenv("AWS_ACCESS_KEY_ID"),
-		SecretAccessKey: os.Getenv("AWS_SECRET_ACCESS_KEY"),
-		SessionToken:    os.Getenv("AWS_SESSION_TOKEN"),
-		Profile:         os.Getenv("AWS_PROFILE"),
+		Endpoint:        getEnvSanitized("S3_ENDPOINT"),
+		AccessKeyID:     getEnvSanitized("AWS_ACCESS_KEY_ID"),
+		SecretAccessKey: getEnvSanitized("AWS_SECRET_ACCESS_KEY"),
+		SessionToken:    getEnvSanitized("AWS_SESSION_TOKEN"),
+		Profile:         getEnvSanitized("AWS_PROFILE"),
 		UsePathStyle:    getEnvBool("S3_USE_PATH_STYLE", false),
 		Timeout:         getEnvDuration("S3_TIMEOUT", DefaultTimeout),
-		Name:            os.Getenv("S3_CONNECTION_NAME"),
+		Name:            getEnvSanitized("S3_CONNECTION_NAME"),
 		DisableSSL:      getEnvBool("S3_DISABLE_SSL", false),
 	}
 
@@ -153,4 +154,23 @@ func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
 	}
 
 	return parsed
+}
+
+// isUnresolvedTemplateVar checks if a string appears to be an unresolved
+// template variable (e.g., "${user_config.some_value}").
+// This can occur when mcpb doesn't resolve optional configuration fields.
+func isUnresolvedTemplateVar(s string) bool {
+	return strings.HasPrefix(s, "${") && strings.HasSuffix(s, "}")
+}
+
+// getEnvSanitized returns the value of an environment variable,
+// treating unresolved template variables as empty strings.
+// This handles cases where mcpb passes through template variables
+// that weren't configured by the user.
+func getEnvSanitized(key string) string {
+	value := os.Getenv(key)
+	if isUnresolvedTemplateVar(value) {
+		return ""
+	}
+	return value
 }
