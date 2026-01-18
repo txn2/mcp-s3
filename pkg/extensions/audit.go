@@ -112,10 +112,11 @@ func (m *AuditMiddleware) Wrap(next tools.ToolHandler) tools.ToolHandler {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		tc := tools.GetToolContext(ctx)
 
+		args, _ := request.Params.Arguments.(map[string]any)
 		entry := AuditEntry{
 			Timestamp: time.Now().UTC(),
 			Tool:      request.Params.Name,
-			Arguments: sanitizeArguments(request.Params.Arguments),
+			Arguments: sanitizeArguments(args),
 		}
 
 		if tc != nil {
