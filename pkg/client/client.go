@@ -130,6 +130,11 @@ func clearUnresolvedAWSEnvVars() {
 
 // New creates a new S3 client with the given configuration.
 func New(ctx context.Context, cfg *Config) (*Client, error) {
+	// Sanitize AWS environment variables before the SDK reads them.
+	// This must happen before config.LoadDefaultConfig() as the AWS SDK
+	// reads environment variables directly, bypassing our sanitization.
+	SanitizeAWSEnvVars()
+
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
