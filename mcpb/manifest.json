@@ -1,0 +1,48 @@
+{
+  "name": "mcp-s3",
+  "version": "0.1.0",
+  "description": "MCP server for Amazon S3 and S3-compatible object storage. Enables AI assistants to list buckets, browse objects, and read/write files in S3.",
+  "command": ["./mcp-s3"],
+  "env": {
+    "AWS_REGION": {
+      "description": "AWS region (e.g., us-east-1)",
+      "required": false,
+      "default": "us-east-1"
+    },
+    "AWS_ACCESS_KEY_ID": {
+      "description": "AWS access key ID for authentication",
+      "required": true
+    },
+    "AWS_SECRET_ACCESS_KEY": {
+      "description": "AWS secret access key for authentication",
+      "required": true,
+      "secret": true
+    },
+    "AWS_SESSION_TOKEN": {
+      "description": "AWS session token (for temporary credentials)",
+      "required": false,
+      "secret": true
+    },
+    "AWS_PROFILE": {
+      "description": "AWS profile name from credentials file",
+      "required": false
+    },
+    "S3_ENDPOINT": {
+      "description": "Custom S3 endpoint URL (for S3-compatible storage like MinIO, SeaweedFS)",
+      "required": false
+    },
+    "S3_USE_PATH_STYLE": {
+      "description": "Use path-style URLs instead of virtual-hosted style (required for most S3-compatible storage)",
+      "required": false,
+      "default": "false"
+    },
+    "MCP_S3_EXT_READONLY": {
+      "description": "Block write operations (put, delete) for safety",
+      "required": false,
+      "default": "true"
+    }
+  },
+  "homepage": "https://github.com/txn2/mcp-s3",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/txn2/mcp-s3"
+}
