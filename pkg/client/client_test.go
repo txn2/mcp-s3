@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
@@ -682,8 +683,8 @@ func TestClient_CopyObject(t *testing.T) {
 func TestClient_PresignGetURL(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		presignMock := &mockPresignAPI{
-			presignGetObjectFunc: func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.PresignOptions)) (*s3.PresignedHTTPRequest, error) {
-				return &s3.PresignedHTTPRequest{
+			presignGetObjectFunc: func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error) {
+				return &v4.PresignedHTTPRequest{
 					URL:    "https://bucket.s3.amazonaws.com/key?X-Amz-Signature=...",
 					Method: "GET",
 				}, nil
@@ -705,7 +706,7 @@ func TestClient_PresignGetURL(t *testing.T) {
 
 	t.Run("error", func(t *testing.T) {
 		presignMock := &mockPresignAPI{
-			presignGetObjectFunc: func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.PresignOptions)) (*s3.PresignedHTTPRequest, error) {
+			presignGetObjectFunc: func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error) {
 				return nil, errors.New("presign failed")
 			},
 		}
@@ -721,8 +722,8 @@ func TestClient_PresignGetURL(t *testing.T) {
 func TestClient_PresignPutURL(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		presignMock := &mockPresignAPI{
-			presignPutObjectFunc: func(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.PresignOptions)) (*s3.PresignedHTTPRequest, error) {
-				return &s3.PresignedHTTPRequest{
+			presignPutObjectFunc: func(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error) {
+				return &v4.PresignedHTTPRequest{
 					URL:    "https://bucket.s3.amazonaws.com/key?X-Amz-Signature=...",
 					Method: "PUT",
 				}, nil
@@ -744,7 +745,7 @@ func TestClient_PresignPutURL(t *testing.T) {
 
 	t.Run("error", func(t *testing.T) {
 		presignMock := &mockPresignAPI{
-			presignPutObjectFunc: func(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.PresignOptions)) (*s3.PresignedHTTPRequest, error) {
+			presignPutObjectFunc: func(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error) {
 				return nil, errors.New("presign failed")
 			},
 		}
