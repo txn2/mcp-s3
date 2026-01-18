@@ -1,48 +1,151 @@
 {
+  "manifest_version": "0.3",
   "name": "mcp-s3",
-  "version": "0.1.0",
-  "description": "MCP server for Amazon S3 and S3-compatible object storage. Enables AI assistants to list buckets, browse objects, and read/write files in S3.",
-  "command": ["./mcp-s3"],
-  "env": {
-    "AWS_REGION": {
+  "display_name": "S3 MCP Server",
+  "icon": "icon.png",
+  "version": "0.0.0",
+  "description": "Access Amazon S3 and S3-compatible object storage via the Model Context Protocol (MCP).",
+  "long_description": "mcp-s3 is a Model Context Protocol server for Amazon S3 and S3-compatible storage systems like MinIO, SeaweedFS, and Ceph. It enables AI assistants like Claude to list buckets, browse objects, read files, and manage storage - all through natural language conversations with your AI assistant.",
+  "author": {
+    "name": "Craig Johnston",
+    "email": "cj@imti.co",
+    "url": "https://imti.co"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/txn2/mcp-s3"
+  },
+  "homepage": "https://github.com/txn2/mcp-s3",
+  "documentation": "https://github.com/txn2/mcp-s3#readme",
+  "license": "Apache-2.0",
+  "keywords": [
+    "s3",
+    "aws",
+    "object-storage",
+    "minio",
+    "seaweedfs",
+    "ceph",
+    "storage",
+    "mcp"
+  ],
+  "server": {
+    "type": "binary",
+    "entry_point": "mcp-s3",
+    "mcp_config": {
+      "command": "${__dirname}/mcp-s3",
+      "args": [],
+      "env": {
+        "AWS_REGION": "${user_config.aws_region}",
+        "AWS_ACCESS_KEY_ID": "${user_config.aws_access_key_id}",
+        "AWS_SECRET_ACCESS_KEY": "${user_config.aws_secret_access_key}",
+        "AWS_SESSION_TOKEN": "${user_config.aws_session_token}",
+        "AWS_PROFILE": "${user_config.aws_profile}",
+        "S3_ENDPOINT": "${user_config.s3_endpoint}",
+        "S3_USE_PATH_STYLE": "${user_config.s3_use_path_style}",
+        "MCP_S3_EXT_READONLY": "${user_config.mcp_s3_ext_readonly}"
+      },
+      "platform_overrides": {
+        "win32": {
+          "command": "${__dirname}/mcp-s3.exe"
+        }
+      }
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": ["darwin", "win32"]
+  },
+  "tools": [
+    {
+      "name": "s3_list_buckets",
+      "description": "List accessible S3 buckets"
+    },
+    {
+      "name": "s3_list_objects",
+      "description": "List objects with prefix, delimiter, and pagination support"
+    },
+    {
+      "name": "s3_get_object",
+      "description": "Retrieve object content from S3"
+    },
+    {
+      "name": "s3_get_object_metadata",
+      "description": "Get object metadata without downloading content (HEAD request)"
+    },
+    {
+      "name": "s3_put_object",
+      "description": "Upload object to S3 (disabled by default in read-only mode)"
+    },
+    {
+      "name": "s3_delete_object",
+      "description": "Delete object from S3 (disabled by default in read-only mode)"
+    },
+    {
+      "name": "s3_copy_object",
+      "description": "Copy object within or between buckets"
+    },
+    {
+      "name": "s3_presign_url",
+      "description": "Generate presigned GET or PUT URLs"
+    },
+    {
+      "name": "s3_list_connections",
+      "description": "List configured S3 connections"
+    }
+  ],
+  "user_config": {
+    "aws_region": {
+      "type": "string",
+      "title": "AWS Region",
       "description": "AWS region (e.g., us-east-1)",
       "required": false,
       "default": "us-east-1"
     },
-    "AWS_ACCESS_KEY_ID": {
+    "aws_access_key_id": {
+      "type": "string",
+      "title": "Access Key ID",
       "description": "AWS access key ID for authentication",
       "required": true
     },
-    "AWS_SECRET_ACCESS_KEY": {
+    "aws_secret_access_key": {
+      "type": "string",
+      "title": "Secret Access Key",
       "description": "AWS secret access key for authentication",
       "required": true,
-      "secret": true
+      "sensitive": true
     },
-    "AWS_SESSION_TOKEN": {
+    "aws_session_token": {
+      "type": "string",
+      "title": "Session Token",
       "description": "AWS session token (for temporary credentials)",
       "required": false,
-      "secret": true
+      "sensitive": true
     },
-    "AWS_PROFILE": {
+    "aws_profile": {
+      "type": "string",
+      "title": "AWS Profile",
       "description": "AWS profile name from credentials file",
       "required": false
     },
-    "S3_ENDPOINT": {
+    "s3_endpoint": {
+      "type": "string",
+      "title": "S3 Endpoint",
       "description": "Custom S3 endpoint URL (for S3-compatible storage like MinIO, SeaweedFS)",
       "required": false
     },
-    "S3_USE_PATH_STYLE": {
+    "s3_use_path_style": {
+      "type": "boolean",
+      "title": "Use Path Style",
       "description": "Use path-style URLs instead of virtual-hosted style (required for most S3-compatible storage)",
       "required": false,
-      "default": "false"
+      "default": false
     },
-    "MCP_S3_EXT_READONLY": {
+    "mcp_s3_ext_readonly": {
+      "type": "boolean",
+      "title": "Read-Only Mode",
       "description": "Block write operations (put, delete) for safety",
       "required": false,
-      "default": "true"
+      "default": true
     }
-  },
-  "homepage": "https://github.com/txn2/mcp-s3",
-  "license": "Apache-2.0",
-  "repository": "https://github.com/txn2/mcp-s3"
+  }
 }
