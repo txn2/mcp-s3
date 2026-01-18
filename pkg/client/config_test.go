@@ -88,6 +88,80 @@ func TestFromEnv(t *testing.T) {
 	})
 }
 
+func TestGetEnvOrDefault_UnresolvedTemplate(t *testing.T) {
+	saved := saveEnv([]string{"AWS_REGION"})
+	defer restoreEnv(saved)
+
+	t.Run("returns default when unresolved template", func(t *testing.T) {
+		os.Setenv("AWS_REGION", "${user_config.aws_region}")
+		result := getEnvOrDefault("AWS_REGION", DefaultRegion)
+		assertString(t, "AWS_REGION", DefaultRegion, result)
+	})
+
+	t.Run("returns value when not a template", func(t *testing.T) {
+		os.Setenv("AWS_REGION", "eu-west-1")
+		result := getEnvOrDefault("AWS_REGION", DefaultRegion)
+		assertString(t, "AWS_REGION", "eu-west-1", result)
+	})
+}
+
+func TestSanitizeAWSEnvVars(t *testing.T) {
+	envVars := []string{"AWS_PROFILE", "AWS_REGION", "AWS_DEFAULT_REGION"}
+	saved := saveEnv(envVars)
+	defer restoreEnv(saved)
+	clearEnv(envVars)
+
+	t.Run("clears unresolved template variables", func(t *testing.T) {
+		setEnvVars(map[string]string{
+			"AWS_PROFILE":        "${user_config.aws_profile}",
+			"AWS_REGION":         "${user_config.aws_region}",
+			"AWS_DEFAULT_REGION": "${user_config.aws_default_region}",
+		})
+
+		SanitizeAWSEnvVars()
+
+		if os.Getenv("AWS_PROFILE") != "" {
+			t.Error("AWS_PROFILE should be unset")
+		}
+		if os.Getenv("AWS_REGION") != "" {
+			t.Error("AWS_REGION should be unset")
+		}
+		if os.Getenv("AWS_DEFAULT_REGION") != "" {
+			t.Error("AWS_DEFAULT_REGION should be unset")
+		}
+	})
+
+	t.Run("preserves valid values", func(t *testing.T) {
+		clearEnv(envVars)
+		setEnvVars(map[string]string{
+			"AWS_PROFILE":        "production",
+			"AWS_REGION":         "us-west-2",
+			"AWS_DEFAULT_REGION": "eu-west-1",
+		})
+
+		SanitizeAWSEnvVars()
+
+		assertString(t, "AWS_PROFILE", "production", os.Getenv("AWS_PROFILE"))
+		assertString(t, "AWS_REGION", "us-west-2", os.Getenv("AWS_REGION"))
+		assertString(t, "AWS_DEFAULT_REGION", "eu-west-1", os.Getenv("AWS_DEFAULT_REGION"))
+	})
+
+	t.Run("handles mix of valid and template values", func(t *testing.T) {
+		clearEnv(envVars)
+		setEnvVars(map[string]string{
+			"AWS_PROFILE": "${user_config.aws_profile}",
+			"AWS_REGION":  "us-east-1",
+		})
+
+		SanitizeAWSEnvVars()
+
+		if os.Getenv("AWS_PROFILE") != "" {
+			t.Error("AWS_PROFILE should be unset")
+		}
+		assertString(t, "AWS_REGION", "us-east-1", os.Getenv("AWS_REGION"))
+	})
+}
+
 func TestIsUnresolvedTemplateVar(t *testing.T) {
 	tests := []struct {
 		input    string
