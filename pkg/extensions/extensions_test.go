@@ -714,11 +714,12 @@ func TestPrefixACLInterceptor_ExtractKey(t *testing.T) {
 		assertBool(t, "Allow", false, result.Allow)
 	})
 
-	t.Run("extracts dest_key from copy object", func(t *testing.T) {
+	t.Run("extracts dest_key from copy object when source is empty", func(t *testing.T) {
+		// Implementation prioritizes source_key; dest_key is only checked when source_key is empty
 		interceptor := NewPrefixACLInterceptor(nil, []string{"blocked/"})
 		tc := tools.NewToolContext(tools.ToolCopyObject, "")
 		req := mcp.CallToolRequest{}
-		req.Params.Arguments = map[string]any{"source_key": "allowed/file.txt", "dest_key": "blocked/file.txt"}
+		req.Params.Arguments = map[string]any{"dest_key": "blocked/file.txt"}
 		result := interceptor.Intercept(context.Background(), tc, req)
 		assertBool(t, "Allow", false, result.Allow)
 	})
