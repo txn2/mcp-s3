@@ -72,25 +72,31 @@ func (t *Toolkit) handlePutObject(ctx context.Context, request mcp.CallToolReque
 		return ErrorResult(ErrReadOnly), nil
 	}
 
+	// Extract arguments
+	args, err := GetArgs(request)
+	if err != nil {
+		return ErrorResult(err), nil
+	}
+
 	// Extract parameters
-	bucket, err := RequireString(request.Params.Arguments, "bucket")
+	bucket, err := RequireString(args, "bucket")
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	key, err := RequireString(request.Params.Arguments, "key")
+	key, err := RequireString(args, "key")
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	contentStr, err := RequireString(request.Params.Arguments, "content")
+	contentStr, err := RequireString(args, "content")
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	contentType := OptionalString(request.Params.Arguments, "content_type", "application/octet-stream")
-	isBase64 := OptionalBool(request.Params.Arguments, "is_base64", false)
-	connectionName := OptionalString(request.Params.Arguments, "connection", "")
+	contentType := OptionalString(args, "content_type", "application/octet-stream")
+	isBase64 := OptionalBool(args, "is_base64", false)
+	connectionName := OptionalString(args, "connection", "")
 
 	// Decode content
 	var body []byte
@@ -110,7 +116,7 @@ func (t *Toolkit) handlePutObject(ctx context.Context, request mcp.CallToolReque
 
 	// Extract metadata if provided
 	var metadata map[string]string
-	if metaVal, ok := request.Params.Arguments["metadata"]; ok {
+	if metaVal, ok := args["metadata"]; ok {
 		if metaMap, ok := metaVal.(map[string]any); ok {
 			metadata = make(map[string]string)
 			for k, v := range metaMap {
