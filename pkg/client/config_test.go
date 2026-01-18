@@ -66,6 +66,49 @@ func TestFromEnv(t *testing.T) {
 		cfg := FromEnv()
 		assertDuration(t, "Timeout", DefaultTimeout, cfg.Timeout)
 	})
+
+	t.Run("unresolved template variables treated as empty", func(t *testing.T) {
+		setEnvVars(map[string]string{
+			"AWS_PROFILE":           "${user_config.aws_profile}",
+			"S3_ENDPOINT":           "${user_config.s3_endpoint}",
+			"AWS_ACCESS_KEY_ID":     "${user_config.aws_access_key_id}",
+			"AWS_SECRET_ACCESS_KEY": "${user_config.aws_secret_access_key}",
+			"AWS_SESSION_TOKEN":     "${user_config.aws_session_token}",
+			"S3_CONNECTION_NAME":    "${user_config.connection_name}",
+		})
+		defer clearEnv(envVars)
+
+		cfg := FromEnv()
+		assertString(t, "Profile", "", cfg.Profile)
+		assertString(t, "Endpoint", "", cfg.Endpoint)
+		assertString(t, "AccessKeyID", "", cfg.AccessKeyID)
+		assertString(t, "SecretAccessKey", "", cfg.SecretAccessKey)
+		assertString(t, "SessionToken", "", cfg.SessionToken)
+		assertString(t, "Name", "", cfg.Name)
+	})
+}
+
+func TestIsUnresolvedTemplateVar(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected bool
+	}{
+		{"${user_config.aws_profile}", true},
+		{"${some_var}", true},
+		{"${}", true},
+		{"normal-value", false},
+		{"", false},
+		{"$missing_braces", false},
+		{"{missing_dollar}", false},
+		{"prefix${var}suffix", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			if got := isUnresolvedTemplateVar(tt.input); got != tt.expected {
+				t.Errorf("isUnresolvedTemplateVar(%q) = %v, expected %v", tt.input, got, tt.expected)
+			}
+		})
+	}
 }
 
 func TestConfig_Validate(t *testing.T) {

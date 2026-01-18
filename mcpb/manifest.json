@@ -42,7 +42,9 @@
         "AWS_PROFILE": "${user_config.aws_profile}",
         "S3_ENDPOINT": "${user_config.s3_endpoint}",
         "S3_USE_PATH_STYLE": "${user_config.s3_use_path_style}",
-        "MCP_S3_EXT_READONLY": "${user_config.mcp_s3_ext_readonly}"
+        "MCP_S3_EXT_READONLY": "${user_config.mcp_s3_ext_readonly}",
+        "S3_CONNECTION_NAME": "${user_config.s3_connection_name}",
+        "S3_ADDITIONAL_CONNECTIONS": "${user_config.s3_additional_connections}"
       },
       "platform_overrides": {
         "win32": {
@@ -146,6 +148,20 @@
       "description": "Block write operations (put, delete) for safety",
       "required": false,
       "default": true
+    },
+    "s3_connection_name": {
+      "type": "string",
+      "title": "Connection Name",
+      "description": "Display name for this connection (e.g., 'production', 'staging')",
+      "required": false,
+      "default": "s3"
+    },
+    "s3_additional_connections": {
+      "type": "string",
+      "title": "Additional Connections (JSON)",
+      "description": "Optional: Add more S3 connections as JSON. Example: {\"staging\": {\"endpoint\": \"https://staging.s3.example.com\", \"access_key_id\": \"KEY\", \"secret_access_key\": \"SECRET\"}}",
+      "required": false,
+      "default": ""
     }
   }
 }
