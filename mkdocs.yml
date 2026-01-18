@@ -39,11 +39,20 @@ nav:
     - Installation: server/installation.md
     - Configuration: server/configuration.md
     - Tools: server/tools.md
+    - Multi-Server: server/multi-server.md
   - Go Library:
     - Overview: library/index.md
     - Quick Start: library/quickstart.md
     - Architecture: library/architecture.md
     - Extensibility: library/extensibility.md
+  - Reference:
+    - Overview: reference/index.md
+    - Tools API: reference/tools-api.md
+    - Configuration: reference/configuration.md
+    - Security: reference/security.md
+  - Support:
+    - Troubleshooting: support/troubleshooting.md
+    - Changelog: support/changelog.md
 
 markdown_extensions:
   - abbr
