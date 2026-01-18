@@ -1,0 +1,108 @@
+version: 2
+
+project_name: mcp-s3
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - id: mcp-s3
+    main: ./cmd/mcp-s3
+    binary: mcp-s3
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/txn2/mcp-s3/internal/server.Version={{.Version}}
+
+archives:
+  - id: default
+    format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - Merge pull request
+      - Merge branch
+
+release:
+  github:
+    owner: txn2
+    name: mcp-s3
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## MCP S3 Server {{ .Version }}
+
+    This release of mcp-s3 provides a Model Context Protocol server for Amazon S3 and S3-compatible storage.
+
+    ### Installation
+
+    **Binary:**
+    ```bash
+    # Download the appropriate binary for your platform from the assets below
+    chmod +x mcp-s3
+    ./mcp-s3
+    ```
+
+    **Docker:**
+    ```bash
+    docker pull txn2/mcp-s3:{{ .Version }}
+    ```
+
+    **Go:**
+    ```bash
+    go install github.com/txn2/mcp-s3/cmd/mcp-s3@{{ .Version }}
+    ```
+
+brews:
+  - name: mcp-s3
+    repository:
+      owner: txn2
+      name: homebrew-tap
+    folder: Formula
+    homepage: https://github.com/txn2/mcp-s3
+    description: MCP server for Amazon S3 and S3-compatible storage
+    license: Apache-2.0
+    test: |
+      system "#{bin}/mcp-s3 --version"
+
+dockers:
+  - image_templates:
+      - "txn2/mcp-s3:{{ .Version }}"
+      - "txn2/mcp-s3:latest"
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.description=MCP server for Amazon S3"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.source={{ .GitURL }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
