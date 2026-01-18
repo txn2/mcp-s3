@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/mark3labs/mcp-go/server"
+
 	"github.com/txn2/mcp-s3/pkg/client"
 	"github.com/txn2/mcp-s3/pkg/extensions"
 	"github.com/txn2/mcp-s3/pkg/multiserver"
