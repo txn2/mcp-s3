@@ -3,11 +3,14 @@ package tools
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+
+	"github.com/txn2/mcp-s3/pkg/client"
 )
 
 // GetObjectResult represents the result of getting an object.
@@ -54,76 +57,89 @@ func (t *Toolkit) registerGetObject(s *server.MCPServer) {
 
 // handleGetObject handles the s3_get_object tool request.
 func (t *Toolkit) handleGetObject(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	// Extract arguments
 	args, err := GetArgs(request)
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	// Extract parameters
-	bucket, err := RequireString(args, "bucket")
+	params, err := extractGetParams(args)
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	key, err := RequireString(args, "key")
+	s3Client, err := t.GetClient(params.connection)
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	connectionName := OptionalString(args, "connection", "")
-
-	// Get client
-	client, err := t.GetClient(connectionName)
-	if err != nil {
+	if err := t.checkGetSizeLimit(ctx, s3Client, params.bucket, params.key); err != nil {
 		return ErrorResult(err), nil
 	}
 
-	// Check size first via metadata if we have size limits
-	if t.maxGetSize > 0 {
-		meta, err := client.GetObjectMetadata(ctx, bucket, key)
-		if err != nil {
-			return ErrorResultf("failed to get object metadata: %v", err), nil
-		}
-
-		if meta.Size > t.maxGetSize {
-			return ErrorResultf("%w: object size %d bytes exceeds limit of %d bytes", ErrSizeLimitExceeded, meta.Size, t.maxGetSize), nil
-		}
-	}
-
-	// Get object
-	content, err := client.GetObject(ctx, bucket, key)
+	content, err := s3Client.GetObject(ctx, params.bucket, params.key)
 	if err != nil {
 		return ErrorResultf("failed to get object: %v", err), nil
 	}
 
-	// Build result
+	return JSONResult(buildGetResult(params, content))
+}
+
+type getParams struct {
+	bucket, key, connection string
+}
+
+func extractGetParams(args map[string]any) (*getParams, error) {
+	bucket, err := RequireString(args, "bucket")
+	if err != nil {
+		return nil, err
+	}
+	key, err := RequireString(args, "key")
+	if err != nil {
+		return nil, err
+	}
+	return &getParams{
+		bucket:     bucket,
+		key:        key,
+		connection: OptionalString(args, "connection", ""),
+	}, nil
+}
+
+func (t *Toolkit) checkGetSizeLimit(ctx context.Context, client S3Client, bucket, key string) error {
+	if t.maxGetSize <= 0 {
+		return nil
+	}
+	meta, err := client.GetObjectMetadata(ctx, bucket, key)
+	if err != nil {
+		return fmt.Errorf("failed to get object metadata: %w", err)
+	}
+	if meta.Size > t.maxGetSize {
+		return fmt.Errorf("%w: object size %d bytes exceeds limit of %d bytes", ErrSizeLimitExceeded, meta.Size, t.maxGetSize)
+	}
+	return nil
+}
+
+func buildGetResult(params *getParams, content *client.ObjectContent) GetObjectResult {
 	result := GetObjectResult{
-		Bucket:      bucket,
-		Key:         key,
+		Bucket:      params.bucket,
+		Key:         params.key,
 		Size:        content.Size,
 		ContentType: content.ContentType,
 		ETag:        content.ETag,
 		Metadata:    content.Metadata,
 		Truncated:   false,
 	}
-
 	if !content.LastModified.IsZero() {
 		result.LastModified = content.LastModified.Format("2006-01-02T15:04:05Z")
 	}
+	result.Content, result.IsBase64 = encodeContent(content.ContentType, content.Body)
+	return result
+}
 
-	// Determine if content is text or binary
-	isText := isTextContent(content.ContentType, content.Body)
-
-	if isText {
-		result.Content = string(content.Body)
-		result.IsBase64 = false
-	} else {
-		result.Content = base64.StdEncoding.EncodeToString(content.Body)
-		result.IsBase64 = true
+func encodeContent(contentType string, body []byte) (string, bool) {
+	if isTextContent(contentType, body) {
+		return string(body), false
 	}
-
-	return JSONResult(result)
+	return base64.StdEncoding.EncodeToString(body), true
 }
 
 // isTextContent determines if the content is text based on content type and content inspection.
