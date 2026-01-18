@@ -118,8 +118,9 @@ var sizeSuffixes = []struct {
 }
 
 // parseSize parses a size value (e.g., "10MB", "1GB") from a string.
+// Returns defaultValue for invalid or negative values.
 func parseSize(s string, defaultValue int64) int64 {
-	if v, err := strconv.ParseInt(s, 10, 64); err == nil {
+	if v, err := strconv.ParseInt(s, 10, 64); err == nil && v >= 0 {
 		return v
 	}
 	return parseSizeWithSuffix(s, defaultValue)
@@ -135,7 +136,11 @@ func parseSizeWithSuffix(s string, defaultValue int64) int64 {
 	for _, entry := range sizeSuffixes {
 		if hasSuffix(upper, entry.suffix) {
 			numPart := s[:len(s)-len(entry.suffix)]
-			if num, err := strconv.ParseInt(numPart, 10, 64); err == nil {
+			if num, err := strconv.ParseInt(numPart, 10, 64); err == nil && num >= 0 {
+				// Check for overflow before multiplication
+				if num > (1<<63-1)/entry.multiplier {
+					return defaultValue
+				}
 				return num * entry.multiplier
 			}
 			return defaultValue
