@@ -5,7 +5,6 @@ run:
   tests: false
 
 linters:
-  default: standard
   enable:
     - misspell
     - unconvert
@@ -15,32 +14,36 @@ linters:
   disable:
     - gosec
     - gocritic
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: false
+    govet:
+      disable:
+        - fieldalignment
+        - shadow
+    misspell:
+      locale: US
+    nakedret:
+      max-func-lines: 30
+    prealloc:
+      simple: true
+      range-loops: true
+      for-loops: true
+  exclusions:
+    generated: lax
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
 
 formatters:
   enable:
     - gofmt
     - goimports
-
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: false
-  govet:
-    enable-all: true
-  misspell:
-    locale: US
-  nakedret:
-    max-func-lines: 30
-  prealloc:
-    simple: true
-    range-loops: true
-    for-loops: true
-
-formatters-settings:
-  goimports:
-    local-prefixes:
-      - github.com/txn2/mcp-s3
-
-issues:
-  max-issues-per-linter: 0
-  max-same-issues: 0
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/txn2/mcp-s3
+  exclusions:
+    generated: lax
