@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -68,94 +69,94 @@ func (t *Toolkit) registerPutObject(s *server.MCPServer) {
 
 // handlePutObject handles the s3_put_object tool request.
 func (t *Toolkit) handlePutObject(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	// Check read-only mode
 	if t.readOnly {
 		return ErrorResult(ErrReadOnly), nil
 	}
 
-	// Extract arguments
 	args, err := GetArgs(request)
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	// Extract parameters
-	bucket, err := RequireString(args, "bucket")
+	params, err := t.extractPutParams(args)
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	key, err := RequireString(args, "key")
+	body, err := decodeContent(params.content, params.isBase64)
+	if err != nil {
+		return ErrorResultf("failed to decode base64 content: %v", err), nil
+	}
+
+	if err := t.checkPutSizeLimit(body); err != nil {
+		return ErrorResult(err), nil
+	}
+
+	s3Client, err := t.GetClient(params.connection)
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	contentStr, err := RequireString(args, "content")
-	if err != nil {
-		return ErrorResult(err), nil
-	}
-
-	contentType := OptionalString(args, "content_type", "application/octet-stream")
-	isBase64 := OptionalBool(args, "is_base64", false)
-	connectionName := OptionalString(args, "connection", "")
-
-	// Decode content
-	var body []byte
-	if isBase64 {
-		body, err = base64.StdEncoding.DecodeString(contentStr)
-		if err != nil {
-			return ErrorResultf("failed to decode base64 content: %v", err), nil
-		}
-	} else {
-		body = []byte(contentStr)
-	}
-
-	// Check size limit
-	if t.maxPutSize > 0 && int64(len(body)) > t.maxPutSize {
-		return ErrorResultf("%w: content size %d bytes exceeds limit of %d bytes", ErrSizeLimitExceeded, len(body), t.maxPutSize), nil
-	}
-
-	// Extract metadata if provided
-	var metadata map[string]string
-	if metaVal, ok := args["metadata"]; ok {
-		if metaMap, ok := metaVal.(map[string]any); ok {
-			metadata = make(map[string]string)
-			for k, v := range metaMap {
-				if strVal, ok := v.(string); ok {
-					metadata[k] = strVal
-				}
-			}
-		}
-	}
-
-	// Get client
-	s3Client, err := t.GetClient(connectionName)
-	if err != nil {
-		return ErrorResult(err), nil
-	}
-
-	// Put object
-	input := &client.PutObjectInput{
-		Bucket:      bucket,
-		Key:         key,
+	output, err := s3Client.PutObject(ctx, &client.PutObjectInput{
+		Bucket:      params.bucket,
+		Key:         params.key,
 		Body:        body,
-		ContentType: contentType,
-		Metadata:    metadata,
-	}
-
-	output, err := s3Client.PutObject(ctx, input)
+		ContentType: params.contentType,
+		Metadata:    params.metadata,
+	})
 	if err != nil {
 		return ErrorResultf("failed to put object: %v", err), nil
 	}
 
-	// Build result
-	result := PutObjectResult{
-		Bucket:    bucket,
-		Key:       key,
+	return JSONResult(PutObjectResult{
+		Bucket:    params.bucket,
+		Key:       params.key,
 		Size:      int64(len(body)),
 		ETag:      output.ETag,
 		VersionID: output.VersionID,
-	}
+	})
+}
 
-	return JSONResult(result)
+type putParams struct {
+	bucket, key, content, contentType, connection string
+	isBase64                                      bool
+	metadata                                      map[string]string
+}
+
+func (t *Toolkit) extractPutParams(args map[string]any) (*putParams, error) {
+	bucket, err := RequireString(args, "bucket")
+	if err != nil {
+		return nil, err
+	}
+	key, err := RequireString(args, "key")
+	if err != nil {
+		return nil, err
+	}
+	content, err := RequireString(args, "content")
+	if err != nil {
+		return nil, err
+	}
+	return &putParams{
+		bucket:      bucket,
+		key:         key,
+		content:     content,
+		contentType: OptionalString(args, "content_type", "application/octet-stream"),
+		isBase64:    OptionalBool(args, "is_base64", false),
+		connection:  OptionalString(args, "connection", ""),
+		metadata:    OptionalMetadata(args, "metadata"),
+	}, nil
+}
+
+func decodeContent(content string, isBase64 bool) ([]byte, error) {
+	if isBase64 {
+		return base64.StdEncoding.DecodeString(content)
+	}
+	return []byte(content), nil
+}
+
+func (t *Toolkit) checkPutSizeLimit(body []byte) error {
+	if t.maxPutSize > 0 && int64(len(body)) > t.maxPutSize {
+		return fmt.Errorf("%w: content size %d bytes exceeds limit of %d bytes", ErrSizeLimitExceeded, len(body), t.maxPutSize)
+	}
+	return nil
 }
