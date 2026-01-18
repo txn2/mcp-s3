@@ -2,6 +2,7 @@ package multiserver
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -314,5 +315,208 @@ func TestManager_ClientProvider(t *testing.T) {
 
 	if client.ConnectionName() != "test" {
 		t.Errorf("expected connection name 'test', got %q", client.ConnectionName())
+	}
+}
+
+func TestManager_DefaultConnectionName(t *testing.T) {
+	cfg := &MultiConfig{
+		DefaultConnection: "my-default",
+		Connections: []ConnectionConfig{
+			{Name: "my-default"},
+		},
+	}
+
+	manager := NewManager(cfg)
+
+	if manager.DefaultConnectionName() != "my-default" {
+		t.Errorf("DefaultConnectionName() = %q, want %q", manager.DefaultConnectionName(), "my-default")
+	}
+}
+
+func TestFromEnvJSON(t *testing.T) {
+	t.Run("empty env returns nil", func(t *testing.T) {
+		os.Unsetenv("S3_ADDITIONAL_CONNECTIONS")
+		os.Unsetenv("S3_CONNECTION_NAME")
+
+		cfg, err := FromEnvJSON()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg != nil {
+			t.Error("expected nil config for empty env")
+		}
+	})
+
+	t.Run("valid JSON", func(t *testing.T) {
+		os.Setenv("S3_ADDITIONAL_CONNECTIONS", `{"prod":{"region":"us-east-1"},"staging":{"region":"us-west-2"}}`)
+		os.Setenv("S3_CONNECTION_NAME", "prod")
+		defer os.Unsetenv("S3_ADDITIONAL_CONNECTIONS")
+		defer os.Unsetenv("S3_CONNECTION_NAME")
+
+		cfg, err := FromEnvJSON()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg == nil {
+			t.Fatal("expected non-nil config")
+		}
+		if cfg.DefaultConnection != "prod" {
+			t.Errorf("DefaultConnection = %q, want %q", cfg.DefaultConnection, "prod")
+		}
+		if len(cfg.Connections) != 2 {
+			t.Errorf("expected 2 connections, got %d", len(cfg.Connections))
+		}
+	})
+
+	t.Run("invalid JSON returns error", func(t *testing.T) {
+		os.Setenv("S3_ADDITIONAL_CONNECTIONS", `invalid json`)
+		defer os.Unsetenv("S3_ADDITIONAL_CONNECTIONS")
+
+		_, err := FromEnvJSON()
+		if err == nil {
+			t.Error("expected error for invalid JSON")
+		}
+	})
+}
+
+func TestFromYAMLFile(t *testing.T) {
+	t.Run("valid YAML file", func(t *testing.T) {
+		content := `default_connection: test
+connections:
+  - name: test
+    region: us-east-1
+`
+		tmpfile, err := os.CreateTemp("", "config*.yaml")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.Remove(tmpfile.Name())
+
+		if _, err := tmpfile.WriteString(content); err != nil {
+			t.Fatal(err)
+		}
+		tmpfile.Close()
+
+		cfg, err := FromYAMLFile(tmpfile.Name())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.DefaultConnection != "test" {
+			t.Errorf("DefaultConnection = %q, want %q", cfg.DefaultConnection, "test")
+		}
+	})
+
+	t.Run("non-existent file returns error", func(t *testing.T) {
+		_, err := FromYAMLFile("/nonexistent/path/config.yaml")
+		if err == nil {
+			t.Error("expected error for non-existent file")
+		}
+	})
+
+	t.Run("invalid YAML returns error", func(t *testing.T) {
+		tmpfile, err := os.CreateTemp("", "config*.yaml")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.Remove(tmpfile.Name())
+
+		if _, err := tmpfile.WriteString("invalid: [yaml: content"); err != nil {
+			t.Fatal(err)
+		}
+		tmpfile.Close()
+
+		_, err = FromYAMLFile(tmpfile.Name())
+		if err == nil {
+			t.Error("expected error for invalid YAML")
+		}
+	})
+}
+
+func TestFromJSONFile(t *testing.T) {
+	t.Run("valid JSON file", func(t *testing.T) {
+		content := `{"default_connection":"test","connections":[{"name":"test","region":"us-east-1"}]}`
+		tmpfile, err := os.CreateTemp("", "config*.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.Remove(tmpfile.Name())
+
+		if _, err := tmpfile.WriteString(content); err != nil {
+			t.Fatal(err)
+		}
+		tmpfile.Close()
+
+		cfg, err := FromJSONFile(tmpfile.Name())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.DefaultConnection != "test" {
+			t.Errorf("DefaultConnection = %q, want %q", cfg.DefaultConnection, "test")
+		}
+	})
+
+	t.Run("non-existent file returns error", func(t *testing.T) {
+		_, err := FromJSONFile("/nonexistent/path/config.json")
+		if err == nil {
+			t.Error("expected error for non-existent file")
+		}
+	})
+
+	t.Run("invalid JSON returns error", func(t *testing.T) {
+		tmpfile, err := os.CreateTemp("", "config*.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.Remove(tmpfile.Name())
+
+		if _, err := tmpfile.WriteString("not valid json"); err != nil {
+			t.Fatal(err)
+		}
+		tmpfile.Close()
+
+		_, err = FromJSONFile(tmpfile.Name())
+		if err == nil {
+			t.Error("expected error for invalid JSON")
+		}
+	})
+}
+
+func TestManager_GetDefaultClient_NoDefault(t *testing.T) {
+	// No default and no connections - should error
+	cfg := &MultiConfig{
+		DefaultConnection: "",
+		Connections:       []ConnectionConfig{},
+	}
+
+	manager := NewManager(cfg)
+
+	_, err := manager.GetDefaultClient(context.Background())
+	if err == nil {
+		t.Error("expected error when no default connection set and no connections")
+	}
+}
+
+func TestManager_GetDefaultClient_FallbackToFirst(t *testing.T) {
+	// No explicit default but has connections - should use first
+	cfg := &MultiConfig{
+		DefaultConnection: "",
+		Connections: []ConnectionConfig{
+			{Name: "first-conn"},
+			{Name: "second-conn"},
+		},
+	}
+
+	factory := func(ctx context.Context, cfg *client.Config) (tools.S3Client, error) {
+		return &mockClient{name: cfg.Name}, nil
+	}
+
+	manager := NewManagerWithFactory(cfg, factory)
+
+	c, err := manager.GetDefaultClient(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.ConnectionName() != "first-conn" {
+		t.Errorf("expected first-conn, got %q", c.ConnectionName())
 	}
 }
