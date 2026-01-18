@@ -40,8 +40,14 @@ func (t *Toolkit) registerListBuckets(s *server.MCPServer) {
 
 // handleListBuckets handles the s3_list_buckets tool request.
 func (t *Toolkit) handleListBuckets(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Extract arguments
+	args, err := GetArgs(request)
+	if err != nil {
+		return ErrorResult(err), nil
+	}
+
 	// Get connection name
-	connectionName := OptionalString(request.Params.Arguments, "connection", "")
+	connectionName := OptionalString(args, "connection", "")
 
 	// Get client
 	client, err := t.GetClient(connectionName)

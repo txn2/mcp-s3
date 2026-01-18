@@ -72,17 +72,23 @@ func (t *Toolkit) registerListObjects(s *server.MCPServer) {
 
 // handleListObjects handles the s3_list_objects tool request.
 func (t *Toolkit) handleListObjects(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	// Extract parameters
-	bucket, err := RequireString(request.Params.Arguments, "bucket")
+	// Extract arguments
+	args, err := GetArgs(request)
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	prefix := OptionalString(request.Params.Arguments, "prefix", "")
-	delimiter := OptionalString(request.Params.Arguments, "delimiter", "")
-	maxKeys := OptionalInt32(request.Params.Arguments, "max_keys", 1000)
-	continueToken := OptionalString(request.Params.Arguments, "continuation_token", "")
-	connectionName := OptionalString(request.Params.Arguments, "connection", "")
+	// Extract parameters
+	bucket, err := RequireString(args, "bucket")
+	if err != nil {
+		return ErrorResult(err), nil
+	}
+
+	prefix := OptionalString(args, "prefix", "")
+	delimiter := OptionalString(args, "delimiter", "")
+	maxKeys := OptionalInt32(args, "max_keys", 1000)
+	continueToken := OptionalString(args, "continuation_token", "")
+	connectionName := OptionalString(args, "connection", "")
 
 	// Get client
 	client, err := t.GetClient(connectionName)
