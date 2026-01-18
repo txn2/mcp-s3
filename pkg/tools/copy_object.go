@@ -69,32 +69,38 @@ func (t *Toolkit) handleCopyObject(ctx context.Context, request mcp.CallToolRequ
 		return ErrorResult(ErrReadOnly), nil
 	}
 
+	// Extract arguments
+	args, err := GetArgs(request)
+	if err != nil {
+		return ErrorResult(err), nil
+	}
+
 	// Extract parameters
-	sourceBucket, err := RequireString(request.Params.Arguments, "source_bucket")
+	sourceBucket, err := RequireString(args, "source_bucket")
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	sourceKey, err := RequireString(request.Params.Arguments, "source_key")
+	sourceKey, err := RequireString(args, "source_key")
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	destBucket, err := RequireString(request.Params.Arguments, "dest_bucket")
+	destBucket, err := RequireString(args, "dest_bucket")
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	destKey, err := RequireString(request.Params.Arguments, "dest_key")
+	destKey, err := RequireString(args, "dest_key")
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	connectionName := OptionalString(request.Params.Arguments, "connection", "")
+	connectionName := OptionalString(args, "connection", "")
 
 	// Extract metadata if provided
 	var metadata map[string]string
-	if metaVal, ok := request.Params.Arguments["metadata"]; ok {
+	if metaVal, ok := args["metadata"]; ok {
 		if metaMap, ok := metaVal.(map[string]any); ok {
 			metadata = make(map[string]string)
 			for k, v := range metaMap {

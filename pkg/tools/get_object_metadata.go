@@ -49,18 +49,24 @@ func (t *Toolkit) registerGetObjectMetadata(s *server.MCPServer) {
 
 // handleGetObjectMetadata handles the s3_get_object_metadata tool request.
 func (t *Toolkit) handleGetObjectMetadata(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Extract arguments
+	args, err := GetArgs(request)
+	if err != nil {
+		return ErrorResult(err), nil
+	}
+
 	// Extract parameters
-	bucket, err := RequireString(request.Params.Arguments, "bucket")
+	bucket, err := RequireString(args, "bucket")
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	key, err := RequireString(request.Params.Arguments, "key")
+	key, err := RequireString(args, "key")
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	connectionName := OptionalString(request.Params.Arguments, "connection", "")
+	connectionName := OptionalString(args, "connection", "")
 
 	// Get client
 	client, err := t.GetClient(connectionName)

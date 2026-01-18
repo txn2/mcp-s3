@@ -49,18 +49,24 @@ func (t *Toolkit) handleDeleteObject(ctx context.Context, request mcp.CallToolRe
 		return ErrorResult(ErrReadOnly), nil
 	}
 
+	// Extract arguments
+	args, err := GetArgs(request)
+	if err != nil {
+		return ErrorResult(err), nil
+	}
+
 	// Extract parameters
-	bucket, err := RequireString(request.Params.Arguments, "bucket")
+	bucket, err := RequireString(args, "bucket")
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	key, err := RequireString(request.Params.Arguments, "key")
+	key, err := RequireString(args, "key")
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	connectionName := OptionalString(request.Params.Arguments, "connection", "")
+	connectionName := OptionalString(args, "connection", "")
 
 	// Get client
 	client, err := t.GetClient(connectionName)
