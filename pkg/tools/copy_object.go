@@ -65,86 +65,82 @@ func (t *Toolkit) registerCopyObject(s *server.MCPServer) {
 
 // handleCopyObject handles the s3_copy_object tool request.
 func (t *Toolkit) handleCopyObject(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	// Check read-only mode
 	if t.readOnly {
 		return ErrorResult(ErrReadOnly), nil
 	}
 
-	// Extract arguments
 	args, err := GetArgs(request)
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	// Extract parameters
-	sourceBucket, err := RequireString(args, "source_bucket")
+	params, err := extractCopyParams(args)
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	sourceKey, err := RequireString(args, "source_key")
+	s3Client, err := t.GetClient(params.connection)
 	if err != nil {
 		return ErrorResult(err), nil
 	}
 
-	destBucket, err := RequireString(args, "dest_bucket")
-	if err != nil {
-		return ErrorResult(err), nil
-	}
-
-	destKey, err := RequireString(args, "dest_key")
-	if err != nil {
-		return ErrorResult(err), nil
-	}
-
-	connectionName := OptionalString(args, "connection", "")
-
-	// Extract metadata if provided
-	var metadata map[string]string
-	if metaVal, ok := args["metadata"]; ok {
-		if metaMap, ok := metaVal.(map[string]any); ok {
-			metadata = make(map[string]string)
-			for k, v := range metaMap {
-				if strVal, ok := v.(string); ok {
-					metadata[k] = strVal
-				}
-			}
-		}
-	}
-
-	// Get client
-	s3Client, err := t.GetClient(connectionName)
-	if err != nil {
-		return ErrorResult(err), nil
-	}
-
-	// Copy object
-	input := &client.CopyObjectInput{
-		SourceBucket: sourceBucket,
-		SourceKey:    sourceKey,
-		DestBucket:   destBucket,
-		DestKey:      destKey,
-		Metadata:     metadata,
-	}
-
-	output, err := s3Client.CopyObject(ctx, input)
+	output, err := s3Client.CopyObject(ctx, &client.CopyObjectInput{
+		SourceBucket: params.sourceBucket,
+		SourceKey:    params.sourceKey,
+		DestBucket:   params.destBucket,
+		DestKey:      params.destKey,
+		Metadata:     params.metadata,
+	})
 	if err != nil {
 		return ErrorResultf("failed to copy object: %v", err), nil
 	}
 
-	// Build result
+	return JSONResult(buildCopyResult(params, output))
+}
+
+type copyParams struct {
+	sourceBucket, sourceKey, destBucket, destKey, connection string
+	metadata                                                 map[string]string
+}
+
+func extractCopyParams(args map[string]any) (*copyParams, error) {
+	sourceBucket, err := RequireString(args, "source_bucket")
+	if err != nil {
+		return nil, err
+	}
+	sourceKey, err := RequireString(args, "source_key")
+	if err != nil {
+		return nil, err
+	}
+	destBucket, err := RequireString(args, "dest_bucket")
+	if err != nil {
+		return nil, err
+	}
+	destKey, err := RequireString(args, "dest_key")
+	if err != nil {
+		return nil, err
+	}
+	return &copyParams{
+		sourceBucket: sourceBucket,
+		sourceKey:    sourceKey,
+		destBucket:   destBucket,
+		destKey:      destKey,
+		connection:   OptionalString(args, "connection", ""),
+		metadata:     OptionalMetadata(args, "metadata"),
+	}, nil
+}
+
+func buildCopyResult(params *copyParams, output *client.CopyObjectOutput) CopyObjectResult {
 	result := CopyObjectResult{
-		SourceBucket: sourceBucket,
-		SourceKey:    sourceKey,
-		DestBucket:   destBucket,
-		DestKey:      destKey,
+		SourceBucket: params.sourceBucket,
+		SourceKey:    params.sourceKey,
+		DestBucket:   params.destBucket,
+		DestKey:      params.destKey,
 		ETag:         output.ETag,
 		VersionID:    output.VersionID,
 	}
-
 	if !output.LastModified.IsZero() {
 		result.LastModified = output.LastModified.Format("2006-01-02T15:04:05Z")
 	}
-
-	return JSONResult(result)
+	return result
 }

@@ -3,7 +3,8 @@
 [![GitHub license](https://img.shields.io/github/license/txn2/mcp-s3.svg)](https://github.com/txn2/mcp-s3/blob/main/LICENSE)
 [![Go Reference](https://pkg.go.dev/badge/github.com/txn2/mcp-s3.svg)](https://pkg.go.dev/github.com/txn2/mcp-s3)
 [![Go Report Card](https://goreportcard.com/badge/github.com/txn2/mcp-s3)](https://goreportcard.com/report/github.com/txn2/mcp-s3)
-[![CI](https://github.com/txn2/mcp-s3/actions/workflows/ci.yml/badge.svg)](https://github.com/txn2/mcp-s3/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/txn2/mcp-s3/badge)](https://securityscorecards.dev/viewer/?uri=github.com/txn2/mcp-s3)
+[![codecov](https://codecov.io/gh/txn2/mcp-s3/graph/badge.svg)](https://codecov.io/gh/txn2/mcp-s3)
 
 **Full documentation at [mcp-s3.txn2.com](https://mcp-s3.txn2.com)**
 

@@ -16,8 +16,8 @@ import (
 
 // Client wraps the AWS S3 SDK client with convenience methods.
 type Client struct {
-	s3Client       *s3.Client
-	presignClient  *s3.PresignClient
+	s3Client       S3API
+	presignClient  PresignAPI
 	config         *Config
 	connectionName string
 }

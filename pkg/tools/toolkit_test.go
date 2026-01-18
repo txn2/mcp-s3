@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 )
 
 func TestNewToolkit(t *testing.T) {
@@ -311,5 +312,276 @@ func TestTransformerChain(t *testing.T) {
 	}
 	if !tc.GetBool("t2-ran") {
 		t.Error("expected t2 to have run")
+	}
+}
+
+func TestToolkit_RegisterTools(t *testing.T) {
+	mock := NewMockS3Client("test")
+	toolkit := NewToolkit(mock)
+
+	// Create a mock MCP server
+	s := server.NewMCPServer("test", "1.0.0")
+
+	// This should not panic
+	toolkit.RegisterTools(s)
+}
+
+func TestToolkit_RegisterTools_WithDisabled(t *testing.T) {
+	mock := NewMockS3Client("test")
+	toolkit := NewToolkit(mock,
+		DisableTool(ToolPutObject, ToolDeleteObject),
+	)
+
+	s := server.NewMCPServer("test", "1.0.0")
+
+	// Should register tools without the disabled ones
+	toolkit.RegisterTools(s)
+}
+
+func TestToolkit_wrapHandler(t *testing.T) {
+	mock := NewMockS3Client("test")
+	toolkit := NewToolkit(mock)
+
+	handlerCalled := false
+	handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		handlerCalled = true
+		return TextResult("success"), nil
+	}
+
+	wrapped := toolkit.wrapHandler("test_tool", handler)
+
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"bucket": "test-bucket"}
+
+	result, err := wrapped(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !handlerCalled {
+		t.Error("expected handler to be called")
+	}
+
+	if result == nil {
+		t.Error("expected non-nil result")
+	}
+}
+
+func TestToolkit_wrapHandler_BlockedByInterceptor(t *testing.T) {
+	mock := NewMockS3Client("test")
+	toolkit := NewToolkit(mock,
+		WithInterceptor(NewRequestInterceptorFunc("blocker", func(ctx context.Context, tc *ToolContext, req mcp.CallToolRequest) InterceptResult {
+			return Blocked("test block reason")
+		})),
+	)
+
+	handlerCalled := false
+	handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		handlerCalled = true
+		return TextResult("success"), nil
+	}
+
+	wrapped := toolkit.wrapHandler("test_tool", handler)
+
+	req := mcp.CallToolRequest{}
+	result, err := wrapped(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if handlerCalled {
+		t.Error("expected handler NOT to be called when blocked")
+	}
+
+	// Result should indicate access denied
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+
+	// Check that the result contains the block reason
+	if len(result.Content) == 0 {
+		t.Fatal("expected content in result")
+	}
+}
+
+func TestToolkit_wrapHandler_WithModifiedRequest(t *testing.T) {
+	mock := NewMockS3Client("test")
+	toolkit := NewToolkit(mock,
+		WithInterceptor(NewRequestInterceptorFunc("modifier", func(ctx context.Context, tc *ToolContext, req mcp.CallToolRequest) InterceptResult {
+			modifiedReq := &req
+			args := modifiedReq.Params.Arguments.(map[string]any)
+			args["modified"] = true
+			return AllowedWithModification(modifiedReq)
+		})),
+	)
+
+	var capturedArgs map[string]any
+	handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		capturedArgs = request.Params.Arguments.(map[string]any)
+		return TextResult("success"), nil
+	}
+
+	wrapped := toolkit.wrapHandler("test_tool", handler)
+
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"original": true}
+
+	_, err := wrapped(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if capturedArgs["modified"] != true {
+		t.Error("expected modified argument to be true")
+	}
+}
+
+func TestToolkit_wrapHandler_WithMiddleware(t *testing.T) {
+	mock := NewMockS3Client("test")
+
+	middlewareCalled := false
+	toolkit := NewToolkit(mock,
+		WithMiddleware(NewMiddlewareFunc("test-mw", func(next ToolHandler) ToolHandler {
+			return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				middlewareCalled = true
+				return next(ctx, req)
+			}
+		})),
+	)
+
+	handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return TextResult("success"), nil
+	}
+
+	wrapped := toolkit.wrapHandler("test_tool", handler)
+
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{}
+
+	_, err := wrapped(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !middlewareCalled {
+		t.Error("expected middleware to be called")
+	}
+}
+
+func TestToolkit_wrapHandler_WithTransformer(t *testing.T) {
+	mock := NewMockS3Client("test")
+
+	transformerCalled := false
+	toolkit := NewToolkit(mock,
+		WithTransformer(NewResultTransformerFunc("test-transformer", func(ctx context.Context, tc *ToolContext, result *mcp.CallToolResult) (*mcp.CallToolResult, error) {
+			transformerCalled = true
+			return result, nil
+		})),
+	)
+
+	handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return TextResult("success"), nil
+	}
+
+	wrapped := toolkit.wrapHandler("test_tool", handler)
+
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{}
+
+	_, err := wrapped(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !transformerCalled {
+		t.Error("expected transformer to be called")
+	}
+}
+
+func TestToolkit_Close(t *testing.T) {
+	mock1 := NewMockS3Client("conn1")
+	mock2 := NewMockS3Client("conn2")
+
+	toolkit := NewToolkit(mock1)
+	toolkit.AddClient("conn2", mock2)
+
+	err := toolkit.Close()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestToolkit_Close_NoClients(t *testing.T) {
+	toolkit := NewToolkit(nil)
+
+	err := toolkit.Close()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestToolkit_GetClient_WithProvider(t *testing.T) {
+	mock := NewMockS3Client("default")
+
+	providerCalled := false
+	toolkit := NewToolkit(mock,
+		WithClientProvider(func(name string) (S3Client, error) {
+			providerCalled = true
+			return NewMockS3Client(name), nil
+		}),
+	)
+
+	client, err := toolkit.GetClient("dynamic-conn")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !providerCalled {
+		t.Error("expected provider to be called")
+	}
+
+	if client.ConnectionName() != "dynamic-conn" {
+		t.Errorf("expected connection name 'dynamic-conn', got %q", client.ConnectionName())
+	}
+
+	// Second call should use cache
+	providerCalled = false
+	client2, err := toolkit.GetClient("dynamic-conn")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if providerCalled {
+		t.Error("expected provider NOT to be called for cached client")
+	}
+
+	if client != client2 {
+		t.Error("expected same client instance from cache")
+	}
+}
+
+func TestToolkit_registerTool(t *testing.T) {
+	mock := NewMockS3Client("test")
+	toolkit := NewToolkit(mock)
+
+	s := server.NewMCPServer("test", "1.0.0")
+
+	tool := mcp.NewTool("test_tool",
+		mcp.WithDescription("A test tool"),
+		mcp.WithString("param", mcp.Required(), mcp.Description("A test parameter")),
+	)
+
+	handlerCalled := false
+	handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		handlerCalled = true
+		return TextResult("success"), nil
+	}
+
+	toolkit.registerTool(s, tool, handler)
+
+	// The tool should be registered (we can't easily verify without calling it)
+	// But at least ensure no panic occurred
+	if handlerCalled {
+		t.Error("handler should not be called during registration")
 	}
 }

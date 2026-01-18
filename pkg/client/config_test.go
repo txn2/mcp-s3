@@ -7,160 +7,84 @@ import (
 )
 
 func TestFromEnv(t *testing.T) {
-	// Save and restore environment
 	envVars := []string{
-		"AWS_REGION",
-		"AWS_ACCESS_KEY_ID",
-		"AWS_SECRET_ACCESS_KEY",
-		"AWS_SESSION_TOKEN",
-		"AWS_PROFILE",
-		"S3_ENDPOINT",
-		"S3_USE_PATH_STYLE",
-		"S3_TIMEOUT",
-		"S3_CONNECTION_NAME",
-		"S3_DISABLE_SSL",
+		"AWS_REGION", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
+		"AWS_SESSION_TOKEN", "AWS_PROFILE", "S3_ENDPOINT",
+		"S3_USE_PATH_STYLE", "S3_TIMEOUT", "S3_CONNECTION_NAME", "S3_DISABLE_SSL",
 	}
 
-	saved := make(map[string]string)
-	for _, v := range envVars {
-		saved[v] = os.Getenv(v)
-	}
-	defer func() {
-		for k, v := range saved {
-			if v == "" {
-				os.Unsetenv(k)
-			} else {
-				os.Setenv(k, v)
-			}
-		}
-	}()
-
-	// Clear all env vars
-	for _, v := range envVars {
-		os.Unsetenv(v)
-	}
+	saved := saveEnv(envVars)
+	defer restoreEnv(saved)
+	clearEnv(envVars)
 
 	t.Run("defaults", func(t *testing.T) {
 		cfg := FromEnv()
-
-		if cfg.Region != DefaultRegion {
-			t.Errorf("expected region %q, got %q", DefaultRegion, cfg.Region)
-		}
-		if cfg.Timeout != DefaultTimeout {
-			t.Errorf("expected timeout %v, got %v", DefaultTimeout, cfg.Timeout)
-		}
-		if cfg.UsePathStyle {
-			t.Error("expected UsePathStyle to be false by default")
-		}
-		if cfg.DisableSSL {
-			t.Error("expected DisableSSL to be false by default")
-		}
+		assertString(t, "Region", DefaultRegion, cfg.Region)
+		assertDuration(t, "Timeout", DefaultTimeout, cfg.Timeout)
+		assertBool(t, "UsePathStyle", false, cfg.UsePathStyle)
+		assertBool(t, "DisableSSL", false, cfg.DisableSSL)
 	})
 
 	t.Run("custom values", func(t *testing.T) {
-		os.Setenv("AWS_REGION", "eu-west-1")
-		os.Setenv("AWS_ACCESS_KEY_ID", "test-access-key")
-		os.Setenv("AWS_SECRET_ACCESS_KEY", "test-secret-key")
-		os.Setenv("AWS_SESSION_TOKEN", "test-token")
-		os.Setenv("AWS_PROFILE", "test-profile")
-		os.Setenv("S3_ENDPOINT", "http://localhost:9000")
-		os.Setenv("S3_USE_PATH_STYLE", "true")
-		os.Setenv("S3_TIMEOUT", "60s")
-		os.Setenv("S3_CONNECTION_NAME", "test-conn")
-		os.Setenv("S3_DISABLE_SSL", "true")
-		defer func() {
-			for _, v := range envVars {
-				os.Unsetenv(v)
-			}
-		}()
+		setEnvVars(map[string]string{
+			"AWS_REGION":            "eu-west-1",
+			"AWS_ACCESS_KEY_ID":     "test-access-key",
+			"AWS_SECRET_ACCESS_KEY": "test-secret-key",
+			"AWS_SESSION_TOKEN":     "test-token",
+			"AWS_PROFILE":           "test-profile",
+			"S3_ENDPOINT":           "http://localhost:9000",
+			"S3_USE_PATH_STYLE":     "true",
+			"S3_TIMEOUT":            "60s",
+			"S3_CONNECTION_NAME":    "test-conn",
+			"S3_DISABLE_SSL":        "true",
+		})
+		defer clearEnv(envVars)
 
 		cfg := FromEnv()
-
-		if cfg.Region != "eu-west-1" {
-			t.Errorf("expected region %q, got %q", "eu-west-1", cfg.Region)
-		}
-		if cfg.AccessKeyID != "test-access-key" {
-			t.Errorf("expected access key %q, got %q", "test-access-key", cfg.AccessKeyID)
-		}
-		if cfg.SecretAccessKey != "test-secret-key" {
-			t.Errorf("expected secret key %q, got %q", "test-secret-key", cfg.SecretAccessKey)
-		}
-		if cfg.SessionToken != "test-token" {
-			t.Errorf("expected session token %q, got %q", "test-token", cfg.SessionToken)
-		}
-		if cfg.Profile != "test-profile" {
-			t.Errorf("expected profile %q, got %q", "test-profile", cfg.Profile)
-		}
-		if cfg.Endpoint != "http://localhost:9000" {
-			t.Errorf("expected endpoint %q, got %q", "http://localhost:9000", cfg.Endpoint)
-		}
-		if !cfg.UsePathStyle {
-			t.Error("expected UsePathStyle to be true")
-		}
-		if cfg.Timeout != 60*time.Second {
-			t.Errorf("expected timeout 60s, got %v", cfg.Timeout)
-		}
-		if cfg.Name != "test-conn" {
-			t.Errorf("expected name %q, got %q", "test-conn", cfg.Name)
-		}
-		if !cfg.DisableSSL {
-			t.Error("expected DisableSSL to be true")
-		}
+		assertString(t, "Region", "eu-west-1", cfg.Region)
+		assertString(t, "AccessKeyID", "test-access-key", cfg.AccessKeyID)
+		assertString(t, "SecretAccessKey", "test-secret-key", cfg.SecretAccessKey)
+		assertString(t, "SessionToken", "test-token", cfg.SessionToken)
+		assertString(t, "Profile", "test-profile", cfg.Profile)
+		assertString(t, "Endpoint", "http://localhost:9000", cfg.Endpoint)
+		assertBool(t, "UsePathStyle", true, cfg.UsePathStyle)
+		assertDuration(t, "Timeout", 60*time.Second, cfg.Timeout)
+		assertString(t, "Name", "test-conn", cfg.Name)
+		assertBool(t, "DisableSSL", true, cfg.DisableSSL)
 	})
 
 	t.Run("invalid bool defaults to false", func(t *testing.T) {
 		os.Setenv("S3_USE_PATH_STYLE", "invalid")
 		defer os.Unsetenv("S3_USE_PATH_STYLE")
-
 		cfg := FromEnv()
-		if cfg.UsePathStyle {
-			t.Error("expected UsePathStyle to be false for invalid value")
-		}
+		assertBool(t, "UsePathStyle", false, cfg.UsePathStyle)
 	})
 
 	t.Run("invalid duration defaults", func(t *testing.T) {
 		os.Setenv("S3_TIMEOUT", "invalid")
 		defer os.Unsetenv("S3_TIMEOUT")
-
 		cfg := FromEnv()
-		if cfg.Timeout != DefaultTimeout {
-			t.Errorf("expected timeout %v, got %v", DefaultTimeout, cfg.Timeout)
-		}
+		assertDuration(t, "Timeout", DefaultTimeout, cfg.Timeout)
 	})
 }
 
 func TestConfig_Validate(t *testing.T) {
 	t.Run("sets defaults", func(t *testing.T) {
 		cfg := &Config{}
-		err := cfg.Validate()
-
-		if err != nil {
+		if err := cfg.Validate(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
-		if cfg.Region != DefaultRegion {
-			t.Errorf("expected region %q, got %q", DefaultRegion, cfg.Region)
-		}
-		if cfg.Timeout != DefaultTimeout {
-			t.Errorf("expected timeout %v, got %v", DefaultTimeout, cfg.Timeout)
-		}
+		assertString(t, "Region", DefaultRegion, cfg.Region)
+		assertDuration(t, "Timeout", DefaultTimeout, cfg.Timeout)
 	})
 
 	t.Run("preserves custom values", func(t *testing.T) {
-		cfg := &Config{
-			Region:  "ap-southeast-1",
-			Timeout: 120 * time.Second,
-		}
-		err := cfg.Validate()
-
-		if err != nil {
+		cfg := &Config{Region: "ap-southeast-1", Timeout: 120 * time.Second}
+		if err := cfg.Validate(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
-		if cfg.Region != "ap-southeast-1" {
-			t.Errorf("expected region %q, got %q", "ap-southeast-1", cfg.Region)
-		}
-		if cfg.Timeout != 120*time.Second {
-			t.Errorf("expected timeout 120s, got %v", cfg.Timeout)
-		}
+		assertString(t, "Region", "ap-southeast-1", cfg.Region)
+		assertDuration(t, "Timeout", 120*time.Second, cfg.Timeout)
 	})
 }
 
@@ -170,33 +94,10 @@ func TestConfig_HasCredentials(t *testing.T) {
 		cfg      Config
 		expected bool
 	}{
-		{
-			name:     "no credentials",
-			cfg:      Config{},
-			expected: false,
-		},
-		{
-			name: "access key only",
-			cfg: Config{
-				AccessKeyID: "test-key",
-			},
-			expected: false,
-		},
-		{
-			name: "secret key only",
-			cfg: Config{
-				SecretAccessKey: "test-secret",
-			},
-			expected: false,
-		},
-		{
-			name: "both credentials",
-			cfg: Config{
-				AccessKeyID:     "test-key",
-				SecretAccessKey: "test-secret",
-			},
-			expected: true,
-		},
+		{"no credentials", Config{}, false},
+		{"access key only", Config{AccessKeyID: "test-key"}, false},
+		{"secret key only", Config{SecretAccessKey: "test-secret"}, false},
+		{"both credentials", Config{AccessKeyID: "test-key", SecretAccessKey: "test-secret"}, true},
 	}
 
 	for _, tt := range tests {
@@ -214,18 +115,8 @@ func TestConfig_HasEndpoint(t *testing.T) {
 		cfg      Config
 		expected bool
 	}{
-		{
-			name:     "no endpoint",
-			cfg:      Config{},
-			expected: false,
-		},
-		{
-			name: "with endpoint",
-			cfg: Config{
-				Endpoint: "http://localhost:9000",
-			},
-			expected: true,
-		},
+		{"no endpoint", Config{}, false},
+		{"with endpoint", Config{Endpoint: "http://localhost:9000"}, true},
 	}
 
 	for _, tt := range tests {
@@ -252,42 +143,78 @@ func TestConfig_Clone(t *testing.T) {
 	}
 
 	clone := original.Clone()
-
-	// Verify clone has same values
-	if clone.Region != original.Region {
-		t.Errorf("Region mismatch: got %q, expected %q", clone.Region, original.Region)
-	}
-	if clone.Endpoint != original.Endpoint {
-		t.Errorf("Endpoint mismatch: got %q, expected %q", clone.Endpoint, original.Endpoint)
-	}
-	if clone.AccessKeyID != original.AccessKeyID {
-		t.Errorf("AccessKeyID mismatch: got %q, expected %q", clone.AccessKeyID, original.AccessKeyID)
-	}
-	if clone.SecretAccessKey != original.SecretAccessKey {
-		t.Errorf("SecretAccessKey mismatch: got %q, expected %q", clone.SecretAccessKey, original.SecretAccessKey)
-	}
-	if clone.SessionToken != original.SessionToken {
-		t.Errorf("SessionToken mismatch: got %q, expected %q", clone.SessionToken, original.SessionToken)
-	}
-	if clone.Profile != original.Profile {
-		t.Errorf("Profile mismatch: got %q, expected %q", clone.Profile, original.Profile)
-	}
-	if clone.UsePathStyle != original.UsePathStyle {
-		t.Errorf("UsePathStyle mismatch: got %v, expected %v", clone.UsePathStyle, original.UsePathStyle)
-	}
-	if clone.Timeout != original.Timeout {
-		t.Errorf("Timeout mismatch: got %v, expected %v", clone.Timeout, original.Timeout)
-	}
-	if clone.Name != original.Name {
-		t.Errorf("Name mismatch: got %q, expected %q", clone.Name, original.Name)
-	}
-	if clone.DisableSSL != original.DisableSSL {
-		t.Errorf("DisableSSL mismatch: got %v, expected %v", clone.DisableSSL, original.DisableSSL)
-	}
+	assertConfigEqual(t, original, clone)
 
 	// Verify clone is independent
 	clone.Region = "ap-northeast-1"
 	if original.Region == clone.Region {
 		t.Error("clone should be independent from original")
 	}
+}
+
+// Test helpers
+
+func saveEnv(vars []string) map[string]string {
+	saved := make(map[string]string)
+	for _, v := range vars {
+		saved[v] = os.Getenv(v)
+	}
+	return saved
+}
+
+func restoreEnv(saved map[string]string) {
+	for k, v := range saved {
+		if v == "" {
+			os.Unsetenv(k)
+		} else {
+			os.Setenv(k, v)
+		}
+	}
+}
+
+func clearEnv(vars []string) {
+	for _, v := range vars {
+		os.Unsetenv(v)
+	}
+}
+
+func setEnvVars(vars map[string]string) {
+	for k, v := range vars {
+		os.Setenv(k, v)
+	}
+}
+
+func assertString(t *testing.T, field, expected, got string) {
+	t.Helper()
+	if got != expected {
+		t.Errorf("%s: expected %q, got %q", field, expected, got)
+	}
+}
+
+func assertDuration(t *testing.T, field string, expected, got time.Duration) {
+	t.Helper()
+	if got != expected {
+		t.Errorf("%s: expected %v, got %v", field, expected, got)
+	}
+}
+
+func assertBool(t *testing.T, field string, expected, got bool) {
+	t.Helper()
+	if got != expected {
+		t.Errorf("%s: expected %v, got %v", field, expected, got)
+	}
+}
+
+func assertConfigEqual(t *testing.T, expected, got *Config) {
+	t.Helper()
+	assertString(t, "Region", expected.Region, got.Region)
+	assertString(t, "Endpoint", expected.Endpoint, got.Endpoint)
+	assertString(t, "AccessKeyID", expected.AccessKeyID, got.AccessKeyID)
+	assertString(t, "SecretAccessKey", expected.SecretAccessKey, got.SecretAccessKey)
+	assertString(t, "SessionToken", expected.SessionToken, got.SessionToken)
+	assertString(t, "Profile", expected.Profile, got.Profile)
+	assertBool(t, "UsePathStyle", expected.UsePathStyle, got.UsePathStyle)
+	assertDuration(t, "Timeout", expected.Timeout, got.Timeout)
+	assertString(t, "Name", expected.Name, got.Name)
+	assertBool(t, "DisableSSL", expected.DisableSSL, got.DisableSSL)
 }

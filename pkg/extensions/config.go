@@ -102,59 +102,51 @@ func parseBool(s string, defaultValue bool) bool {
 	return v
 }
 
+// sizeSuffixes maps size suffixes to their multipliers and lengths.
+var sizeSuffixes = []struct {
+	suffix     string
+	multiplier int64
+}{
+	{"KB", 1024},
+	{"MB", 1024 * 1024},
+	{"GB", 1024 * 1024 * 1024},
+	{"TB", 1024 * 1024 * 1024 * 1024},
+	{"K", 1024},
+	{"M", 1024 * 1024},
+	{"G", 1024 * 1024 * 1024},
+	{"T", 1024 * 1024 * 1024 * 1024},
+}
+
 // parseSize parses a size value (e.g., "10MB", "1GB") from a string.
+// Returns defaultValue for invalid or negative values.
 func parseSize(s string, defaultValue int64) int64 {
-	// Try parsing as plain number first
-	if v, err := strconv.ParseInt(s, 10, 64); err == nil {
+	if v, err := strconv.ParseInt(s, 10, 64); err == nil && v >= 0 {
 		return v
 	}
+	return parseSizeWithSuffix(s, defaultValue)
+}
 
-	// Try parsing with suffix
+// parseSizeWithSuffix handles size strings with unit suffixes.
+func parseSizeWithSuffix(s string, defaultValue int64) int64 {
 	if len(s) < 2 {
 		return defaultValue
 	}
 
-	// Normalize to uppercase for matching
 	upper := toUpper(s)
-
-	var numPart string
-	var multiplier int64
-
-	switch {
-	case hasSuffix(upper, "KB"):
-		numPart = s[:len(s)-2]
-		multiplier = 1024
-	case hasSuffix(upper, "MB"):
-		numPart = s[:len(s)-2]
-		multiplier = 1024 * 1024
-	case hasSuffix(upper, "GB"):
-		numPart = s[:len(s)-2]
-		multiplier = 1024 * 1024 * 1024
-	case hasSuffix(upper, "TB"):
-		numPart = s[:len(s)-2]
-		multiplier = 1024 * 1024 * 1024 * 1024
-	case hasSuffix(upper, "K"):
-		numPart = s[:len(s)-1]
-		multiplier = 1024
-	case hasSuffix(upper, "M"):
-		numPart = s[:len(s)-1]
-		multiplier = 1024 * 1024
-	case hasSuffix(upper, "G"):
-		numPart = s[:len(s)-1]
-		multiplier = 1024 * 1024 * 1024
-	case hasSuffix(upper, "T"):
-		numPart = s[:len(s)-1]
-		multiplier = 1024 * 1024 * 1024 * 1024
-	default:
-		return defaultValue
+	for _, entry := range sizeSuffixes {
+		if hasSuffix(upper, entry.suffix) {
+			numPart := s[:len(s)-len(entry.suffix)]
+			if num, err := strconv.ParseInt(numPart, 10, 64); err == nil && num >= 0 {
+				// Check for overflow before multiplication
+				if num > (1<<63-1)/entry.multiplier {
+					return defaultValue
+				}
+				return num * entry.multiplier
+			}
+			return defaultValue
+		}
 	}
-
-	num, err := strconv.ParseInt(numPart, 10, 64)
-	if err != nil {
-		return defaultValue
-	}
-
-	return num * multiplier
+	return defaultValue
 }
 
 // toUpper converts a string to uppercase without importing strings package.
