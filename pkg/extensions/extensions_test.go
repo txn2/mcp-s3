@@ -1,7 +1,9 @@
 package extensions
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"os"
 	"testing"
 
@@ -230,5 +232,254 @@ func assertInt64(t *testing.T, field string, expected, got int64) {
 	t.Helper()
 	if got != expected {
 		t.Errorf("%s: expected %d, got %d", field, expected, got)
+	}
+}
+
+// Additional tests for improved coverage
+
+func TestNewAuditLogger(t *testing.T) {
+	t.Run("writes to writer", func(t *testing.T) {
+		var buf bytes.Buffer
+		logger := NewAuditLogger(&buf)
+
+		err := logger.Log(AuditEntry{Tool: "test_tool", Success: true})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if buf.Len() == 0 {
+			t.Error("expected data written to buffer")
+		}
+	})
+
+	t.Run("nil writer does not panic", func(t *testing.T) {
+		logger := NewAuditLogger(nil)
+		err := logger.Log(AuditEntry{Tool: "test", Success: true})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestAuditMiddleware(t *testing.T) {
+	t.Run("name returns audit", func(t *testing.T) {
+		logger := NewBufferedAuditLogger()
+		mw := NewAuditMiddleware(logger)
+		if mw.Name() != "audit" {
+			t.Errorf("Name() = %q, want %q", mw.Name(), "audit")
+		}
+	})
+
+	t.Run("wrap logs successful call", func(t *testing.T) {
+		logger := NewBufferedAuditLogger()
+		mw := NewAuditMiddleware(logger)
+
+		handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return tools.TextResult("success"), nil
+		}
+
+		wrapped := mw.Wrap(handler)
+		req := mcp.CallToolRequest{}
+		req.Params.Name = "test_tool"
+		req.Params.Arguments = map[string]any{"bucket": "test-bucket"}
+
+		_, err := wrapped(context.Background(), req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		entries := logger.Entries()
+		if len(entries) != 1 {
+			t.Fatalf("expected 1 entry, got %d", len(entries))
+		}
+		if !entries[0].Success {
+			t.Error("expected success=true")
+		}
+		if entries[0].Tool != "test_tool" {
+			t.Errorf("Tool = %q, want %q", entries[0].Tool, "test_tool")
+		}
+	})
+
+	t.Run("wrap logs error call", func(t *testing.T) {
+		logger := NewBufferedAuditLogger()
+		mw := NewAuditMiddleware(logger)
+
+		handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return nil, errors.New("test error")
+		}
+
+		wrapped := mw.Wrap(handler)
+		req := mcp.CallToolRequest{}
+		req.Params.Name = "test_tool"
+
+		_, _ = wrapped(context.Background(), req)
+
+		entries := logger.Entries()
+		if len(entries) != 1 {
+			t.Fatalf("expected 1 entry, got %d", len(entries))
+		}
+		if entries[0].Success {
+			t.Error("expected success=false")
+		}
+		if entries[0].Error != "test error" {
+			t.Errorf("Error = %q, want %q", entries[0].Error, "test error")
+		}
+	})
+
+	t.Run("wrap logs result with IsError", func(t *testing.T) {
+		logger := NewBufferedAuditLogger()
+		mw := NewAuditMiddleware(logger)
+
+		handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return tools.ErrorResult(errors.New("result error")), nil
+		}
+
+		wrapped := mw.Wrap(handler)
+		req := mcp.CallToolRequest{}
+		req.Params.Name = "test_tool"
+
+		_, _ = wrapped(context.Background(), req)
+
+		entries := logger.Entries()
+		if len(entries) != 1 {
+			t.Fatalf("expected 1 entry, got %d", len(entries))
+		}
+		if entries[0].Success {
+			t.Error("expected success=false for error result")
+		}
+	})
+
+	t.Run("wrap uses tool context", func(t *testing.T) {
+		logger := NewBufferedAuditLogger()
+		mw := NewAuditMiddleware(logger)
+
+		handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return tools.TextResult("ok"), nil
+		}
+
+		wrapped := mw.Wrap(handler)
+		req := mcp.CallToolRequest{}
+		req.Params.Name = "test_tool"
+
+		tc := tools.NewToolContext("test_tool", "my-connection")
+		tc.RequestID = "req-123"
+		ctx := tools.WithToolContext(context.Background(), tc)
+
+		_, _ = wrapped(ctx, req)
+
+		entries := logger.Entries()
+		if entries[0].Connection != "my-connection" {
+			t.Errorf("Connection = %q, want %q", entries[0].Connection, "my-connection")
+		}
+		if entries[0].RequestID != "req-123" {
+			t.Errorf("RequestID = %q, want %q", entries[0].RequestID, "req-123")
+		}
+	})
+}
+
+func TestSanitizeArguments(t *testing.T) {
+	t.Run("nil args returns nil", func(t *testing.T) {
+		result := sanitizeArguments(nil)
+		if result != nil {
+			t.Error("expected nil")
+		}
+	})
+
+	t.Run("sanitizes content field", func(t *testing.T) {
+		args := map[string]any{
+			"content": "secret data here",
+			"bucket":  "my-bucket",
+		}
+		result := sanitizeArguments(args)
+
+		// content should be replaced with length
+		if result["content"] != 16 {
+			t.Errorf("content = %v, want 16", result["content"])
+		}
+		// bucket should be preserved
+		if result["bucket"] != "my-bucket" {
+			t.Errorf("bucket = %v, want my-bucket", result["bucket"])
+		}
+	})
+
+	t.Run("sanitizes metadata field", func(t *testing.T) {
+		args := map[string]any{
+			"metadata": map[string]any{
+				"key1": "value1",
+				"key2": "value2",
+			},
+		}
+		result := sanitizeArguments(args)
+
+		// metadata should be replaced with keys only
+		keys, ok := result["metadata"].([]string)
+		if !ok {
+			t.Fatalf("metadata should be []string, got %T", result["metadata"])
+		}
+		if len(keys) != 2 {
+			t.Errorf("expected 2 keys, got %d", len(keys))
+		}
+	})
+
+	t.Run("handles non-string content", func(t *testing.T) {
+		args := map[string]any{
+			"content": 12345,
+		}
+		result := sanitizeArguments(args)
+		if result["content"] != "[content]" {
+			t.Errorf("content = %v, want [content]", result["content"])
+		}
+	})
+
+	t.Run("handles non-map metadata", func(t *testing.T) {
+		args := map[string]any{
+			"metadata": "not a map",
+		}
+		result := sanitizeArguments(args)
+		if result["metadata"] != "[metadata]" {
+			t.Errorf("metadata = %v, want [metadata]", result["metadata"])
+		}
+	})
+}
+
+func TestReadOnlyInterceptor_Name(t *testing.T) {
+	interceptor := NewReadOnlyInterceptor(true)
+	if interceptor.Name() != "readonly" {
+		t.Errorf("Name() = %q, want %q", interceptor.Name(), "readonly")
+	}
+}
+
+func TestSizeLimitInterceptor_Name(t *testing.T) {
+	interceptor := NewSizeLimitInterceptor(1024, 1024)
+	if interceptor.Name() != "sizelimit" {
+		t.Errorf("Name() = %q, want %q", interceptor.Name(), "sizelimit")
+	}
+}
+
+func TestPrefixACLInterceptor_Name(t *testing.T) {
+	interceptor := NewPrefixACLInterceptor(nil, nil)
+	if interceptor.Name() != "prefixacl" {
+		t.Errorf("Name() = %q, want %q", interceptor.Name(), "prefixacl")
+	}
+}
+
+func TestMetrics_GetAllStats(t *testing.T) {
+	metrics := NewMetrics()
+	metrics.RecordCall("tool1", 100*1e6, false)
+	metrics.RecordCall("tool2", 200*1e6, false)
+	metrics.RecordCall("tool1", 150*1e6, true)
+
+	allStats := metrics.GetAllStats()
+
+	if len(allStats) != 2 {
+		t.Errorf("expected 2 tools, got %d", len(allStats))
+	}
+
+	if stats, ok := allStats["tool1"]; ok {
+		if stats.Calls != 2 {
+			t.Errorf("tool1 calls = %d, want 2", stats.Calls)
+		}
+	} else {
+		t.Error("tool1 not found in stats")
 	}
 }
