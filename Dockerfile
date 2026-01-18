@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM alpine:3.23
+FROM alpine:3.23@sha256:1882fa4569e0c591ea092d3766c4893e19b8901a8e649de7067188aba3cc0679
 
 # Install ca-certificates for TLS connections
 RUN apk add --no-cache ca-certificates
