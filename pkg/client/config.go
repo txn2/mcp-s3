@@ -119,11 +119,13 @@ func (c *Config) Clone() *Config {
 }
 
 // getEnvOrDefault returns the value of an environment variable or a default value.
+// It treats unresolved template variables (from mcpb) as empty strings.
 func getEnvOrDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
+	value := os.Getenv(key)
+	if value == "" || isUnresolvedTemplateVar(value) {
+		return defaultValue
 	}
-	return defaultValue
+	return value
 }
 
 // getEnvBool returns the boolean value of an environment variable or a default value.
@@ -173,4 +175,22 @@ func getEnvSanitized(key string) string {
 		return ""
 	}
 	return value
+}
+
+// SanitizeAWSEnvVars clears AWS environment variables that contain
+// unresolved template variables. This prevents the AWS SDK from using
+// invalid values when mcpb passes through unresolved templates.
+// This function must be called before config.LoadDefaultConfig() as the
+// AWS SDK reads these environment variables directly.
+func SanitizeAWSEnvVars() {
+	envVars := []string{
+		"AWS_PROFILE",
+		"AWS_REGION",
+		"AWS_DEFAULT_REGION",
+	}
+	for _, key := range envVars {
+		if isUnresolvedTemplateVar(os.Getenv(key)) {
+			_ = os.Unsetenv(key)
+		}
+	}
 }
