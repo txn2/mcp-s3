@@ -3,8 +3,7 @@ package tools
 import (
 	"context"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/txn2/mcp-s3/pkg/client"
 )
@@ -20,127 +19,81 @@ type CopyObjectResult struct {
 	VersionID    string `json:"version_id,omitempty"`
 }
 
-// registerCopyObject registers the s3_copy_object tool.
-func (t *Toolkit) registerCopyObject(s *server.MCPServer) {
-	tool := mcp.Tool{
-		Name:        t.toolName(ToolCopyObject),
-		Description: "Copy an object within S3, either within the same bucket or between different buckets. Can optionally update metadata during the copy. This operation may be blocked in read-only mode.",
-		InputSchema: mcp.ToolInputSchema{
-			Type:     "object",
-			Required: []string{"source_bucket", "source_key", "dest_bucket", "dest_key"},
-			Properties: map[string]any{
-				"source_bucket": map[string]any{
-					"type":        "string",
-					"description": "Name of the source S3 bucket.",
-				},
-				"source_key": map[string]any{
-					"type":        "string",
-					"description": "Key (path) of the source object.",
-				},
-				"dest_bucket": map[string]any{
-					"type":        "string",
-					"description": "Name of the destination S3 bucket.",
-				},
-				"dest_key": map[string]any{
-					"type":        "string",
-					"description": "Key (path) for the destination object.",
-				},
-				"metadata": map[string]any{
-					"type":        "object",
-					"description": "New metadata to assign to the copied object. If provided, replaces source metadata.",
-					"additionalProperties": map[string]any{
-						"type": "string",
-					},
-				},
-				"connection": map[string]any{
-					"type":        "string",
-					"description": "Name of the S3 connection to use. If not specified, uses the default connection.",
-				},
-			},
-		},
+// registerCopyObjectTool registers the s3_copy_object tool.
+func (t *Toolkit) registerCopyObjectTool(server *mcp.Server, cfg *toolConfig) {
+	baseHandler := func(ctx context.Context, req *mcp.CallToolRequest, input any) (*mcp.CallToolResult, any, error) {
+		copyInput, ok := input.(CopyObjectInput)
+		if !ok {
+			return ErrorResult("internal error: invalid input type"), nil, nil
+		}
+		return t.handleCopyObject(ctx, req, copyInput)
 	}
 
-	t.registerTool(s, tool, t.handleCopyObject)
+	wrappedHandler := t.wrapHandler(ToolCopyObject, baseHandler, cfg)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        t.toolName(ToolCopyObject),
+		Description: "Copy an object within S3, either within the same bucket or between different buckets. Can optionally update metadata during the copy. This operation may be blocked in read-only mode.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input CopyObjectInput) (*mcp.CallToolResult, any, error) {
+		return wrappedHandler(ctx, req, input)
+	})
 }
 
 // handleCopyObject handles the s3_copy_object tool request.
-func (t *Toolkit) handleCopyObject(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (t *Toolkit) handleCopyObject(ctx context.Context, _ *mcp.CallToolRequest, input CopyObjectInput) (*mcp.CallToolResult, any, error) {
+	// Check read-only mode
 	if t.readOnly {
-		return ErrorResult(ErrReadOnly), nil
+		return ErrorResult(ErrReadOnly.Error()), nil, nil
 	}
 
-	args, err := GetArgs(request)
+	// Validate required parameters
+	if input.SourceBucket == "" {
+		return ErrorResult("source_bucket parameter is required"), nil, nil
+	}
+	if input.SourceKey == "" {
+		return ErrorResult("source_key parameter is required"), nil, nil
+	}
+	if input.DestBucket == "" {
+		return ErrorResult("dest_bucket parameter is required"), nil, nil
+	}
+	if input.DestKey == "" {
+		return ErrorResult("dest_key parameter is required"), nil, nil
+	}
+
+	// Get client
+	s3Client, err := t.GetClient(input.Connection)
 	if err != nil {
-		return ErrorResult(err), nil
+		return ErrorResult(err.Error()), nil, nil
 	}
 
-	params, err := extractCopyParams(args)
-	if err != nil {
-		return ErrorResult(err), nil
-	}
-
-	s3Client, err := t.GetClient(params.connection)
-	if err != nil {
-		return ErrorResult(err), nil
-	}
-
+	// Copy object
 	output, err := s3Client.CopyObject(ctx, &client.CopyObjectInput{
-		SourceBucket: params.sourceBucket,
-		SourceKey:    params.sourceKey,
-		DestBucket:   params.destBucket,
-		DestKey:      params.destKey,
-		Metadata:     params.metadata,
+		SourceBucket: input.SourceBucket,
+		SourceKey:    input.SourceKey,
+		DestBucket:   input.DestBucket,
+		DestKey:      input.DestKey,
+		Metadata:     input.Metadata,
 	})
 	if err != nil {
-		return ErrorResultf("failed to copy object: %v", err), nil
+		return ErrorResultf("failed to copy object: %v", err), nil, nil
 	}
 
-	return JSONResult(buildCopyResult(params, output))
-}
-
-type copyParams struct {
-	sourceBucket, sourceKey, destBucket, destKey, connection string
-	metadata                                                 map[string]string
-}
-
-func extractCopyParams(args map[string]any) (*copyParams, error) {
-	sourceBucket, err := RequireString(args, "source_bucket")
-	if err != nil {
-		return nil, err
-	}
-	sourceKey, err := RequireString(args, "source_key")
-	if err != nil {
-		return nil, err
-	}
-	destBucket, err := RequireString(args, "dest_bucket")
-	if err != nil {
-		return nil, err
-	}
-	destKey, err := RequireString(args, "dest_key")
-	if err != nil {
-		return nil, err
-	}
-	return &copyParams{
-		sourceBucket: sourceBucket,
-		sourceKey:    sourceKey,
-		destBucket:   destBucket,
-		destKey:      destKey,
-		connection:   OptionalString(args, "connection", ""),
-		metadata:     OptionalMetadata(args, "metadata"),
-	}, nil
-}
-
-func buildCopyResult(params *copyParams, output *client.CopyObjectOutput) CopyObjectResult {
+	// Build result
 	result := CopyObjectResult{
-		SourceBucket: params.sourceBucket,
-		SourceKey:    params.sourceKey,
-		DestBucket:   params.destBucket,
-		DestKey:      params.destKey,
+		SourceBucket: input.SourceBucket,
+		SourceKey:    input.SourceKey,
+		DestBucket:   input.DestBucket,
+		DestKey:      input.DestKey,
 		ETag:         output.ETag,
 		VersionID:    output.VersionID,
 	}
 	if !output.LastModified.IsZero() {
 		result.LastModified = output.LastModified.Format("2006-01-02T15:04:05Z")
 	}
-	return result
+
+	jsonResult, err := JSONResult(result)
+	if err != nil {
+		return ErrorResultf("failed to format result: %v", err), nil, nil
+	}
+	return jsonResult, nil, nil
 }
