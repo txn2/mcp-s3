@@ -2,10 +2,10 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestNewToolkit(t *testing.T) {
@@ -167,19 +167,19 @@ func TestToolkit_toolName(t *testing.T) {
 	tests := []struct {
 		name     string
 		prefix   string
-		toolName string
+		toolName ToolName
 		expected string
 	}{
 		{
 			name:     "no prefix",
 			prefix:   "",
-			toolName: "s3_list_buckets",
+			toolName: ToolListBuckets,
 			expected: "s3_list_buckets",
 		},
 		{
 			name:     "with prefix",
 			prefix:   "my_",
-			toolName: "s3_list_buckets",
+			toolName: ToolListBuckets,
 			expected: "my_s3_list_buckets",
 		},
 	}
@@ -197,38 +197,43 @@ func TestToolkit_toolName(t *testing.T) {
 	}
 }
 
-func TestMiddleware(t *testing.T) {
+func TestMiddlewareChain_Execution(t *testing.T) {
 	callOrder := []string{}
 
-	m1 := NewMiddlewareFunc("m1", func(next ToolHandler) ToolHandler {
-		return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	m1 := NewMiddlewareFunc("m1",
+		func(ctx context.Context, tc *ToolContext) (context.Context, error) {
 			callOrder = append(callOrder, "m1-before")
-			result, err := next(ctx, request)
+			return ctx, nil
+		},
+		func(ctx context.Context, tc *ToolContext, result *mcp.CallToolResult, err error) (*mcp.CallToolResult, error) {
 			callOrder = append(callOrder, "m1-after")
 			return result, err
-		}
-	})
+		},
+	)
 
-	m2 := NewMiddlewareFunc("m2", func(next ToolHandler) ToolHandler {
-		return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	m2 := NewMiddlewareFunc("m2",
+		func(ctx context.Context, tc *ToolContext) (context.Context, error) {
 			callOrder = append(callOrder, "m2-before")
-			result, err := next(ctx, request)
+			return ctx, nil
+		},
+		func(ctx context.Context, tc *ToolContext, result *mcp.CallToolResult, err error) (*mcp.CallToolResult, error) {
 			callOrder = append(callOrder, "m2-after")
 			return result, err
-		}
-	})
+		},
+	)
 
-	handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		callOrder = append(callOrder, "handler")
-		return TextResult("ok"), nil
-	}
+	chain := NewMiddlewareChain()
+	chain.Add(m1)
+	chain.Add(m2)
 
-	chained := ChainMiddleware(handler, m1, m2)
+	tc := NewToolContext(ToolListBuckets, "")
+	ctx, _ := chain.Before(context.Background(), tc)
 
-	_, err := chained(context.Background(), mcp.CallToolRequest{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	// Simulate handler
+	callOrder = append(callOrder, "handler")
+
+	result := TextResult("ok")
+	_, _ = chain.After(ctx, tc, result, nil)
 
 	expected := []string{"m1-before", "m2-before", "handler", "m2-after", "m1-after"}
 	if len(callOrder) != len(expected) {
@@ -246,15 +251,15 @@ func TestInterceptorChain(t *testing.T) {
 	t.Run("all allow", func(t *testing.T) {
 		chain := NewInterceptorChain()
 
-		chain.Add(NewRequestInterceptorFunc("i1", func(ctx context.Context, tc *ToolContext, request mcp.CallToolRequest) InterceptResult {
+		chain.Add(NewRequestInterceptorFunc("i1", func(ctx context.Context, tc *ToolContext, request *mcp.CallToolRequest) InterceptResult {
 			return Allowed()
 		}))
 
-		chain.Add(NewRequestInterceptorFunc("i2", func(ctx context.Context, tc *ToolContext, request mcp.CallToolRequest) InterceptResult {
+		chain.Add(NewRequestInterceptorFunc("i2", func(ctx context.Context, tc *ToolContext, request *mcp.CallToolRequest) InterceptResult {
 			return Allowed()
 		}))
 
-		result := chain.Intercept(context.Background(), NewToolContext("test", ""), mcp.CallToolRequest{})
+		result := chain.Intercept(context.Background(), NewToolContext("test", ""), &mcp.CallToolRequest{})
 		if !result.Allow {
 			t.Error("expected request to be allowed")
 		}
@@ -263,15 +268,15 @@ func TestInterceptorChain(t *testing.T) {
 	t.Run("one blocks", func(t *testing.T) {
 		chain := NewInterceptorChain()
 
-		chain.Add(NewRequestInterceptorFunc("i1", func(ctx context.Context, tc *ToolContext, request mcp.CallToolRequest) InterceptResult {
+		chain.Add(NewRequestInterceptorFunc("i1", func(ctx context.Context, tc *ToolContext, request *mcp.CallToolRequest) InterceptResult {
 			return Allowed()
 		}))
 
-		chain.Add(NewRequestInterceptorFunc("i2", func(ctx context.Context, tc *ToolContext, request mcp.CallToolRequest) InterceptResult {
+		chain.Add(NewRequestInterceptorFunc("i2", func(ctx context.Context, tc *ToolContext, request *mcp.CallToolRequest) InterceptResult {
 			return Blocked("test block")
 		}))
 
-		result := chain.Intercept(context.Background(), NewToolContext("test", ""), mcp.CallToolRequest{})
+		result := chain.Intercept(context.Background(), NewToolContext("test", ""), &mcp.CallToolRequest{})
 		if result.Allow {
 			t.Error("expected request to be blocked")
 		}
@@ -285,7 +290,6 @@ func TestTransformerChain(t *testing.T) {
 	chain := NewTransformerChain()
 
 	chain.Add(NewResultTransformerFunc("t1", func(ctx context.Context, tc *ToolContext, result *mcp.CallToolResult) (*mcp.CallToolResult, error) {
-		// Add a marker to the result
 		tc.Set("t1-ran", true)
 		return result, nil
 	}))
@@ -315,187 +319,27 @@ func TestTransformerChain(t *testing.T) {
 	}
 }
 
-func TestToolkit_RegisterTools(t *testing.T) {
+func TestToolkit_RegisterAll(t *testing.T) {
 	mock := NewMockS3Client("test")
 	toolkit := NewToolkit(mock)
 
 	// Create a mock MCP server
-	s := server.NewMCPServer("test", "1.0.0")
+	s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0.0"}, nil)
 
 	// This should not panic
-	toolkit.RegisterTools(s)
+	toolkit.RegisterAll(s)
 }
 
-func TestToolkit_RegisterTools_WithDisabled(t *testing.T) {
+func TestToolkit_RegisterAll_WithDisabled(t *testing.T) {
 	mock := NewMockS3Client("test")
 	toolkit := NewToolkit(mock,
 		DisableTool(ToolPutObject, ToolDeleteObject),
 	)
 
-	s := server.NewMCPServer("test", "1.0.0")
+	s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0.0"}, nil)
 
 	// Should register tools without the disabled ones
-	toolkit.RegisterTools(s)
-}
-
-func TestToolkit_wrapHandler(t *testing.T) {
-	mock := NewMockS3Client("test")
-	toolkit := NewToolkit(mock)
-
-	handlerCalled := false
-	handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		handlerCalled = true
-		return TextResult("success"), nil
-	}
-
-	wrapped := toolkit.wrapHandler("test_tool", handler)
-
-	req := mcp.CallToolRequest{}
-	req.Params.Arguments = map[string]any{"bucket": "test-bucket"}
-
-	result, err := wrapped(context.Background(), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if !handlerCalled {
-		t.Error("expected handler to be called")
-	}
-
-	if result == nil {
-		t.Error("expected non-nil result")
-	}
-}
-
-func TestToolkit_wrapHandler_BlockedByInterceptor(t *testing.T) {
-	mock := NewMockS3Client("test")
-	toolkit := NewToolkit(mock,
-		WithInterceptor(NewRequestInterceptorFunc("blocker", func(ctx context.Context, tc *ToolContext, req mcp.CallToolRequest) InterceptResult {
-			return Blocked("test block reason")
-		})),
-	)
-
-	handlerCalled := false
-	handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		handlerCalled = true
-		return TextResult("success"), nil
-	}
-
-	wrapped := toolkit.wrapHandler("test_tool", handler)
-
-	req := mcp.CallToolRequest{}
-	result, err := wrapped(context.Background(), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if handlerCalled {
-		t.Error("expected handler NOT to be called when blocked")
-	}
-
-	// Result should indicate access denied
-	if result == nil {
-		t.Fatal("expected non-nil result")
-	}
-
-	// Check that the result contains the block reason
-	if len(result.Content) == 0 {
-		t.Fatal("expected content in result")
-	}
-}
-
-func TestToolkit_wrapHandler_WithModifiedRequest(t *testing.T) {
-	mock := NewMockS3Client("test")
-	toolkit := NewToolkit(mock,
-		WithInterceptor(NewRequestInterceptorFunc("modifier", func(ctx context.Context, tc *ToolContext, req mcp.CallToolRequest) InterceptResult {
-			modifiedReq := &req
-			args := modifiedReq.Params.Arguments.(map[string]any)
-			args["modified"] = true
-			return AllowedWithModification(modifiedReq)
-		})),
-	)
-
-	var capturedArgs map[string]any
-	handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		capturedArgs = request.Params.Arguments.(map[string]any)
-		return TextResult("success"), nil
-	}
-
-	wrapped := toolkit.wrapHandler("test_tool", handler)
-
-	req := mcp.CallToolRequest{}
-	req.Params.Arguments = map[string]any{"original": true}
-
-	_, err := wrapped(context.Background(), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if capturedArgs["modified"] != true {
-		t.Error("expected modified argument to be true")
-	}
-}
-
-func TestToolkit_wrapHandler_WithMiddleware(t *testing.T) {
-	mock := NewMockS3Client("test")
-
-	middlewareCalled := false
-	toolkit := NewToolkit(mock,
-		WithMiddleware(NewMiddlewareFunc("test-mw", func(next ToolHandler) ToolHandler {
-			return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				middlewareCalled = true
-				return next(ctx, req)
-			}
-		})),
-	)
-
-	handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return TextResult("success"), nil
-	}
-
-	wrapped := toolkit.wrapHandler("test_tool", handler)
-
-	req := mcp.CallToolRequest{}
-	req.Params.Arguments = map[string]any{}
-
-	_, err := wrapped(context.Background(), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if !middlewareCalled {
-		t.Error("expected middleware to be called")
-	}
-}
-
-func TestToolkit_wrapHandler_WithTransformer(t *testing.T) {
-	mock := NewMockS3Client("test")
-
-	transformerCalled := false
-	toolkit := NewToolkit(mock,
-		WithTransformer(NewResultTransformerFunc("test-transformer", func(ctx context.Context, tc *ToolContext, result *mcp.CallToolResult) (*mcp.CallToolResult, error) {
-			transformerCalled = true
-			return result, nil
-		})),
-	)
-
-	handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return TextResult("success"), nil
-	}
-
-	wrapped := toolkit.wrapHandler("test_tool", handler)
-
-	req := mcp.CallToolRequest{}
-	req.Params.Arguments = map[string]any{}
-
-	_, err := wrapped(context.Background(), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if !transformerCalled {
-		t.Error("expected transformer to be called")
-	}
+	toolkit.RegisterAll(s)
 }
 
 func TestToolkit_Close(t *testing.T) {
@@ -560,28 +404,250 @@ func TestToolkit_GetClient_WithProvider(t *testing.T) {
 	}
 }
 
-func TestToolkit_registerTool(t *testing.T) {
+func makeTestRequest(args map[string]any) *mcp.CallToolRequest {
+	req := &mcp.CallToolRequest{
+		Params: &mcp.CallToolParamsRaw{},
+	}
+	if args != nil {
+		argsJSON, _ := json.Marshal(args)
+		req.Params.Arguments = argsJSON
+	}
+	return req
+}
+
+func TestToolkit_wrapHandler_BlockedByInterceptor(t *testing.T) {
 	mock := NewMockS3Client("test")
-	toolkit := NewToolkit(mock)
-
-	s := server.NewMCPServer("test", "1.0.0")
-
-	tool := mcp.NewTool("test_tool",
-		mcp.WithDescription("A test tool"),
-		mcp.WithString("param", mcp.Required(), mcp.Description("A test parameter")),
+	toolkit := NewToolkit(mock,
+		WithInterceptor(NewRequestInterceptorFunc("blocker", func(ctx context.Context, tc *ToolContext, req *mcp.CallToolRequest) InterceptResult {
+			return Blocked("test block reason")
+		})),
 	)
 
 	handlerCalled := false
-	handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	handler := func(ctx context.Context, req *mcp.CallToolRequest, input any) (*mcp.CallToolResult, any, error) {
 		handlerCalled = true
-		return TextResult("success"), nil
+		return TextResult("success"), nil, nil
 	}
 
-	toolkit.registerTool(s, tool, handler)
+	wrapped := toolkit.wrapHandler(ToolListBuckets, handler, nil)
 
-	// The tool should be registered (we can't easily verify without calling it)
-	// But at least ensure no panic occurred
+	req := makeTestRequest(nil)
+	result, _, err := wrapped(context.Background(), req, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
 	if handlerCalled {
-		t.Error("handler should not be called during registration")
+		t.Error("expected handler NOT to be called when blocked")
+	}
+
+	// Result should indicate access denied
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+
+	// Check that the result contains the block reason
+	if len(result.Content) == 0 {
+		t.Fatal("expected content in result")
+	}
+}
+
+func TestToolkit_wrapHandler_WithMiddleware(t *testing.T) {
+	mock := NewMockS3Client("test")
+
+	beforeCalled := false
+	afterCalled := false
+	toolkit := NewToolkit(mock,
+		WithMiddleware(NewMiddlewareFunc("test-mw",
+			func(ctx context.Context, tc *ToolContext) (context.Context, error) {
+				beforeCalled = true
+				return ctx, nil
+			},
+			func(ctx context.Context, tc *ToolContext, result *mcp.CallToolResult, err error) (*mcp.CallToolResult, error) {
+				afterCalled = true
+				return result, err
+			},
+		)),
+	)
+
+	handler := func(ctx context.Context, req *mcp.CallToolRequest, input any) (*mcp.CallToolResult, any, error) {
+		return TextResult("success"), nil, nil
+	}
+
+	wrapped := toolkit.wrapHandler(ToolListBuckets, handler, nil)
+
+	req := makeTestRequest(nil)
+	_, _, err := wrapped(context.Background(), req, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !beforeCalled {
+		t.Error("expected middleware Before to be called")
+	}
+	if !afterCalled {
+		t.Error("expected middleware After to be called")
+	}
+}
+
+func TestToolkit_wrapHandler_WithTransformer(t *testing.T) {
+	mock := NewMockS3Client("test")
+
+	transformerCalled := false
+	toolkit := NewToolkit(mock,
+		WithTransformer(NewResultTransformerFunc("test-transformer", func(ctx context.Context, tc *ToolContext, result *mcp.CallToolResult) (*mcp.CallToolResult, error) {
+			transformerCalled = true
+			return result, nil
+		})),
+	)
+
+	handler := func(ctx context.Context, req *mcp.CallToolRequest, input any) (*mcp.CallToolResult, any, error) {
+		return TextResult("success"), nil, nil
+	}
+
+	wrapped := toolkit.wrapHandler(ToolListBuckets, handler, nil)
+
+	req := makeTestRequest(nil)
+	_, _, err := wrapped(context.Background(), req, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !transformerCalled {
+		t.Error("expected transformer to be called")
+	}
+}
+
+func TestToolkit_RegisterWith(t *testing.T) {
+	mock := NewMockS3Client("test")
+	toolkit := NewToolkit(mock)
+
+	s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0.0"}, nil)
+
+	// Register a tool with per-registration options
+	mw := NewMiddlewareFunc("test-mw",
+		func(ctx context.Context, tc *ToolContext) (context.Context, error) {
+			return ctx, nil
+		},
+		func(ctx context.Context, tc *ToolContext, result *mcp.CallToolResult, err error) (*mcp.CallToolResult, error) {
+			return result, err
+		},
+	)
+
+	toolkit.RegisterWith(s, ToolListBuckets, WithPerToolMiddleware(mw))
+
+	// Tool should be registered
+	if !toolkit.registeredTools[ToolListBuckets] {
+		t.Error("expected ToolListBuckets to be registered")
+	}
+}
+
+func TestToolkit_RegisterTools(t *testing.T) {
+	mock := NewMockS3Client("test")
+	toolkit := NewToolkit(mock)
+
+	s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0.0"}, nil)
+
+	// RegisterTools is an alias for RegisterAll
+	toolkit.RegisterTools(s)
+
+	// All tools should be registered
+	for _, name := range AllTools() {
+		if !toolkit.registeredTools[name] {
+			t.Errorf("expected %s to be registered", name)
+		}
+	}
+}
+
+func TestWithToolMiddleware(t *testing.T) {
+	mock := NewMockS3Client("test")
+
+	mw := NewMiddlewareFunc("test-mw",
+		func(ctx context.Context, tc *ToolContext) (context.Context, error) {
+			return ctx, nil
+		},
+		func(ctx context.Context, tc *ToolContext, result *mcp.CallToolResult, err error) (*mcp.CallToolResult, error) {
+			return result, err
+		},
+	)
+
+	toolkit := NewToolkit(mock, WithToolMiddleware(ToolListBuckets, mw))
+
+	if len(toolkit.toolMiddlewares[ToolListBuckets]) != 1 {
+		t.Errorf("expected 1 middleware for ToolListBuckets, got %d", len(toolkit.toolMiddlewares[ToolListBuckets]))
+	}
+}
+
+func TestWithPerToolMiddleware(t *testing.T) {
+	mw := NewMiddlewareFunc("test-mw",
+		func(ctx context.Context, tc *ToolContext) (context.Context, error) {
+			return ctx, nil
+		},
+		func(ctx context.Context, tc *ToolContext, result *mcp.CallToolResult, err error) (*mcp.CallToolResult, error) {
+			return result, err
+		},
+	)
+
+	cfg := &toolConfig{}
+	opt := WithPerToolMiddleware(mw)
+	opt(cfg)
+
+	if len(cfg.middlewares) != 1 {
+		t.Errorf("expected 1 middleware, got %d", len(cfg.middlewares))
+	}
+}
+
+func TestNewToolMiddlewareRegistry(t *testing.T) {
+	registry := NewToolMiddlewareRegistry()
+
+	if registry == nil {
+		t.Error("expected non-nil registry")
+	}
+
+	// Test Register method (alias for Add)
+	mw := NewMiddlewareFunc("test-mw",
+		func(ctx context.Context, tc *ToolContext) (context.Context, error) {
+			return ctx, nil
+		},
+		func(ctx context.Context, tc *ToolContext, result *mcp.CallToolResult, err error) (*mcp.CallToolResult, error) {
+			return result, err
+		},
+	)
+
+	registry.Register(mw)
+
+	if len(registry.All()) != 1 {
+		t.Errorf("expected 1 middleware, got %d", len(registry.All()))
+	}
+}
+
+func TestToolkit_RegisterTool_PreventsDuplicates(t *testing.T) {
+	mock := NewMockS3Client("test")
+	toolkit := NewToolkit(mock)
+
+	s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0.0"}, nil)
+
+	// Register the same tool twice
+	toolkit.Register(s, ToolListBuckets)
+	toolkit.Register(s, ToolListBuckets)
+
+	// Should only be registered once (no panic)
+	if !toolkit.registeredTools[ToolListBuckets] {
+		t.Error("expected ToolListBuckets to be registered")
+	}
+}
+
+func TestToolkit_RegisterTool_SkipsDisabled(t *testing.T) {
+	mock := NewMockS3Client("test")
+	toolkit := NewToolkit(mock, DisableTool(ToolPutObject))
+
+	s := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0.0"}, nil)
+
+	// Try to register disabled tool
+	toolkit.Register(s, ToolPutObject)
+
+	// Should not be registered
+	if toolkit.registeredTools[ToolPutObject] {
+		t.Error("expected ToolPutObject NOT to be registered when disabled")
 	}
 }

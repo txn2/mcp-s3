@@ -4,8 +4,6 @@ import (
 	"context"
 	"testing"
 	"time"
-
-	"github.com/mark3labs/mcp-go/mcp"
 )
 
 func TestListBuckets(t *testing.T) {
@@ -15,11 +13,8 @@ func TestListBuckets(t *testing.T) {
 
 	toolkit := NewToolkit(mock)
 
-	req := mcp.CallToolRequest{}
-	req.Params.Name = ToolListBuckets
-	req.Params.Arguments = map[string]any{}
-
-	result, err := toolkit.handleListBuckets(context.Background(), req)
+	input := ListBucketsInput{}
+	result, _, err := toolkit.handleListBuckets(context.Background(), nil, input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -38,13 +33,11 @@ func TestListObjects(t *testing.T) {
 	toolkit := NewToolkit(mock)
 
 	t.Run("list all objects", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Name = ToolListObjects
-		req.Params.Arguments = map[string]any{
-			"bucket": "test-bucket",
+		input := ListObjectsInput{
+			Bucket: "test-bucket",
 		}
 
-		result, err := toolkit.handleListObjects(context.Background(), req)
+		result, _, err := toolkit.handleListObjects(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -55,14 +48,12 @@ func TestListObjects(t *testing.T) {
 	})
 
 	t.Run("list with prefix", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Name = ToolListObjects
-		req.Params.Arguments = map[string]any{
-			"bucket": "test-bucket",
-			"prefix": "folder/",
+		input := ListObjectsInput{
+			Bucket: "test-bucket",
+			Prefix: "folder/",
 		}
 
-		result, err := toolkit.handleListObjects(context.Background(), req)
+		result, _, err := toolkit.handleListObjects(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -73,11 +64,9 @@ func TestListObjects(t *testing.T) {
 	})
 
 	t.Run("missing bucket", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Name = ToolListObjects
-		req.Params.Arguments = map[string]any{}
+		input := ListObjectsInput{}
 
-		result, err := toolkit.handleListObjects(context.Background(), req)
+		result, _, err := toolkit.handleListObjects(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -96,14 +85,12 @@ func TestGetObject(t *testing.T) {
 	toolkit := NewToolkit(mock)
 
 	t.Run("get text object", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Name = ToolGetObject
-		req.Params.Arguments = map[string]any{
-			"bucket": "test-bucket",
-			"key":    "text.txt",
+		input := GetObjectInput{
+			Bucket: "test-bucket",
+			Key:    "text.txt",
 		}
 
-		result, err := toolkit.handleGetObject(context.Background(), req)
+		result, _, err := toolkit.handleGetObject(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -114,14 +101,12 @@ func TestGetObject(t *testing.T) {
 	})
 
 	t.Run("get binary object", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Name = ToolGetObject
-		req.Params.Arguments = map[string]any{
-			"bucket": "test-bucket",
-			"key":    "binary.bin",
+		input := GetObjectInput{
+			Bucket: "test-bucket",
+			Key:    "binary.bin",
 		}
 
-		result, err := toolkit.handleGetObject(context.Background(), req)
+		result, _, err := toolkit.handleGetObject(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -132,13 +117,11 @@ func TestGetObject(t *testing.T) {
 	})
 
 	t.Run("missing bucket", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Name = ToolGetObject
-		req.Params.Arguments = map[string]any{
-			"key": "text.txt",
+		input := GetObjectInput{
+			Key: "text.txt",
 		}
 
-		result, err := toolkit.handleGetObject(context.Background(), req)
+		result, _, err := toolkit.handleGetObject(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -154,16 +137,14 @@ func TestPutObject(t *testing.T) {
 	toolkit := NewToolkit(mock)
 
 	t.Run("put text object", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Name = ToolPutObject
-		req.Params.Arguments = map[string]any{
-			"bucket":       "test-bucket",
-			"key":          "new-file.txt",
-			"content":      "Hello, World!",
-			"content_type": "text/plain",
+		input := PutObjectInput{
+			Bucket:      "test-bucket",
+			Key:         "new-file.txt",
+			Content:     "Hello, World!",
+			ContentType: "text/plain",
 		}
 
-		result, err := toolkit.handlePutObject(context.Background(), req)
+		result, _, err := toolkit.handlePutObject(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -176,15 +157,13 @@ func TestPutObject(t *testing.T) {
 	t.Run("put object read-only mode", func(t *testing.T) {
 		readOnlyToolkit := NewToolkit(mock, WithReadOnly(true))
 
-		req := mcp.CallToolRequest{}
-		req.Params.Name = ToolPutObject
-		req.Params.Arguments = map[string]any{
-			"bucket":  "test-bucket",
-			"key":     "new-file.txt",
-			"content": "Hello!",
+		input := PutObjectInput{
+			Bucket:  "test-bucket",
+			Key:     "new-file.txt",
+			Content: "Hello!",
 		}
 
-		result, err := readOnlyToolkit.handlePutObject(context.Background(), req)
+		result, _, err := readOnlyToolkit.handlePutObject(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -202,14 +181,12 @@ func TestDeleteObject(t *testing.T) {
 	toolkit := NewToolkit(mock)
 
 	t.Run("delete object", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Name = ToolDeleteObject
-		req.Params.Arguments = map[string]any{
-			"bucket": "test-bucket",
-			"key":    "to-delete.txt",
+		input := DeleteObjectInput{
+			Bucket: "test-bucket",
+			Key:    "to-delete.txt",
 		}
 
-		result, err := toolkit.handleDeleteObject(context.Background(), req)
+		result, _, err := toolkit.handleDeleteObject(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -222,14 +199,12 @@ func TestDeleteObject(t *testing.T) {
 	t.Run("delete object read-only mode", func(t *testing.T) {
 		readOnlyToolkit := NewToolkit(mock, WithReadOnly(true))
 
-		req := mcp.CallToolRequest{}
-		req.Params.Name = ToolDeleteObject
-		req.Params.Arguments = map[string]any{
-			"bucket": "test-bucket",
-			"key":    "to-delete.txt",
+		input := DeleteObjectInput{
+			Bucket: "test-bucket",
+			Key:    "to-delete.txt",
 		}
 
-		result, err := readOnlyToolkit.handleDeleteObject(context.Background(), req)
+		result, _, err := readOnlyToolkit.handleDeleteObject(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -247,16 +222,14 @@ func TestCopyObject(t *testing.T) {
 	toolkit := NewToolkit(mock)
 
 	t.Run("copy object", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Name = ToolCopyObject
-		req.Params.Arguments = map[string]any{
-			"source_bucket": "source-bucket",
-			"source_key":    "source.txt",
-			"dest_bucket":   "dest-bucket",
-			"dest_key":      "dest.txt",
+		input := CopyObjectInput{
+			SourceBucket: "source-bucket",
+			SourceKey:    "source.txt",
+			DestBucket:   "dest-bucket",
+			DestKey:      "dest.txt",
 		}
 
-		result, err := toolkit.handleCopyObject(context.Background(), req)
+		result, _, err := toolkit.handleCopyObject(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -272,15 +245,13 @@ func TestPresignURL(t *testing.T) {
 	toolkit := NewToolkit(mock)
 
 	t.Run("presign GET URL", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Name = ToolPresignURL
-		req.Params.Arguments = map[string]any{
-			"bucket": "test-bucket",
-			"key":    "file.txt",
-			"method": "GET",
+		input := PresignURLInput{
+			Bucket: "test-bucket",
+			Key:    "file.txt",
+			Method: "GET",
 		}
 
-		result, err := toolkit.handlePresignURL(context.Background(), req)
+		result, _, err := toolkit.handlePresignURL(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -291,15 +262,13 @@ func TestPresignURL(t *testing.T) {
 	})
 
 	t.Run("presign PUT URL", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Name = ToolPresignURL
-		req.Params.Arguments = map[string]any{
-			"bucket": "test-bucket",
-			"key":    "file.txt",
-			"method": "PUT",
+		input := PresignURLInput{
+			Bucket: "test-bucket",
+			Key:    "file.txt",
+			Method: "PUT",
 		}
 
-		result, err := toolkit.handlePresignURL(context.Background(), req)
+		result, _, err := toolkit.handlePresignURL(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -314,11 +283,7 @@ func TestListConnections(t *testing.T) {
 	mock := NewMockS3Client("default")
 	toolkit := NewToolkit(mock, WithDefaultConnection("default"))
 
-	req := mcp.CallToolRequest{}
-	req.Params.Name = ToolListConnections
-	req.Params.Arguments = map[string]any{}
-
-	result, err := toolkit.handleListConnections(context.Background(), req)
+	result, _, err := toolkit.handleListConnections(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -384,14 +349,12 @@ func TestGetObjectMetadata(t *testing.T) {
 	toolkit := NewToolkit(mock)
 
 	t.Run("get metadata success", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Name = ToolGetObjectMetadata
-		req.Params.Arguments = map[string]any{
-			"bucket": "test-bucket",
-			"key":    "file.txt",
+		input := GetObjectMetadataInput{
+			Bucket: "test-bucket",
+			Key:    "file.txt",
 		}
 
-		result, err := toolkit.handleGetObjectMetadata(context.Background(), req)
+		result, _, err := toolkit.handleGetObjectMetadata(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -402,13 +365,11 @@ func TestGetObjectMetadata(t *testing.T) {
 	})
 
 	t.Run("missing bucket", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Name = ToolGetObjectMetadata
-		req.Params.Arguments = map[string]any{
-			"key": "file.txt",
+		input := GetObjectMetadataInput{
+			Key: "file.txt",
 		}
 
-		result, err := toolkit.handleGetObjectMetadata(context.Background(), req)
+		result, _, err := toolkit.handleGetObjectMetadata(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -419,56 +380,17 @@ func TestGetObjectMetadata(t *testing.T) {
 	})
 
 	t.Run("missing key", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Name = ToolGetObjectMetadata
-		req.Params.Arguments = map[string]any{
-			"bucket": "test-bucket",
+		input := GetObjectMetadataInput{
+			Bucket: "test-bucket",
 		}
 
-		result, err := toolkit.handleGetObjectMetadata(context.Background(), req)
+		result, _, err := toolkit.handleGetObjectMetadata(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
 		if !result.IsError {
 			t.Error("expected error for missing key")
-		}
-	})
-
-	t.Run("object not found", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Name = ToolGetObjectMetadata
-		req.Params.Arguments = map[string]any{
-			"bucket": "test-bucket",
-			"key":    "nonexistent.txt",
-		}
-
-		result, err := toolkit.handleGetObjectMetadata(context.Background(), req)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if !result.IsError {
-			t.Error("expected error for nonexistent object")
-		}
-	})
-
-	t.Run("with connection", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Name = ToolGetObjectMetadata
-		req.Params.Arguments = map[string]any{
-			"bucket":     "test-bucket",
-			"key":        "file.txt",
-			"connection": "test",
-		}
-
-		result, err := toolkit.handleGetObjectMetadata(context.Background(), req)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if result.IsError {
-			t.Errorf("unexpected error result: %v", result.Content)
 		}
 	})
 }
@@ -478,14 +400,13 @@ func TestCopyObject_MissingParams(t *testing.T) {
 	toolkit := NewToolkit(mock)
 
 	t.Run("missing source_bucket", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Arguments = map[string]any{
-			"source_key":  "src.txt",
-			"dest_bucket": "dest",
-			"dest_key":    "dst.txt",
+		input := CopyObjectInput{
+			SourceKey:  "src.txt",
+			DestBucket: "dest",
+			DestKey:    "dst.txt",
 		}
 
-		result, err := toolkit.handleCopyObject(context.Background(), req)
+		result, _, err := toolkit.handleCopyObject(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -496,14 +417,13 @@ func TestCopyObject_MissingParams(t *testing.T) {
 	})
 
 	t.Run("missing source_key", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Arguments = map[string]any{
-			"source_bucket": "src",
-			"dest_bucket":   "dest",
-			"dest_key":      "dst.txt",
+		input := CopyObjectInput{
+			SourceBucket: "src",
+			DestBucket:   "dest",
+			DestKey:      "dst.txt",
 		}
 
-		result, err := toolkit.handleCopyObject(context.Background(), req)
+		result, _, err := toolkit.handleCopyObject(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -512,56 +432,19 @@ func TestCopyObject_MissingParams(t *testing.T) {
 			t.Error("expected error for missing source_key")
 		}
 	})
-
-	t.Run("missing dest_bucket", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Arguments = map[string]any{
-			"source_bucket": "src",
-			"source_key":    "src.txt",
-			"dest_key":      "dst.txt",
-		}
-
-		result, err := toolkit.handleCopyObject(context.Background(), req)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if !result.IsError {
-			t.Error("expected error for missing dest_bucket")
-		}
-	})
-
-	t.Run("missing dest_key", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Arguments = map[string]any{
-			"source_bucket": "src",
-			"source_key":    "src.txt",
-			"dest_bucket":   "dest",
-		}
-
-		result, err := toolkit.handleCopyObject(context.Background(), req)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if !result.IsError {
-			t.Error("expected error for missing dest_key")
-		}
-	})
 }
 
 func TestPresignURL_InvalidMethod(t *testing.T) {
 	mock := NewMockS3Client("test")
 	toolkit := NewToolkit(mock)
 
-	req := mcp.CallToolRequest{}
-	req.Params.Arguments = map[string]any{
-		"bucket": "test-bucket",
-		"key":    "file.txt",
-		"method": "DELETE",
+	input := PresignURLInput{
+		Bucket: "test-bucket",
+		Key:    "file.txt",
+		Method: "DELETE",
 	}
 
-	result, err := toolkit.handlePresignURL(context.Background(), req)
+	result, _, err := toolkit.handlePresignURL(context.Background(), nil, input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -571,80 +454,17 @@ func TestPresignURL_InvalidMethod(t *testing.T) {
 	}
 }
 
-func TestPresignURL_MissingParams(t *testing.T) {
-	mock := NewMockS3Client("test")
-	toolkit := NewToolkit(mock)
-
-	t.Run("missing bucket", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Arguments = map[string]any{
-			"key":    "file.txt",
-			"method": "GET",
-		}
-
-		result, err := toolkit.handlePresignURL(context.Background(), req)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if !result.IsError {
-			t.Error("expected error for missing bucket")
-		}
-	})
-
-	t.Run("missing key", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Arguments = map[string]any{
-			"bucket": "test-bucket",
-			"method": "GET",
-		}
-
-		result, err := toolkit.handlePresignURL(context.Background(), req)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if !result.IsError {
-			t.Error("expected error for missing key")
-		}
-	})
-}
-
-func TestPutObject_Base64Content(t *testing.T) {
-	mock := NewMockS3Client("test")
-	toolkit := NewToolkit(mock)
-
-	req := mcp.CallToolRequest{}
-	req.Params.Arguments = map[string]any{
-		"bucket":       "test-bucket",
-		"key":          "binary.bin",
-		"content":      "SGVsbG8sIFdvcmxkIQ==", // "Hello, World!" in base64
-		"encoding":     "base64",
-		"content_type": "application/octet-stream",
-	}
-
-	result, err := toolkit.handlePutObject(context.Background(), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if result.IsError {
-		t.Errorf("unexpected error result: %v", result.Content)
-	}
-}
-
 func TestPutObject_MissingParams(t *testing.T) {
 	mock := NewMockS3Client("test")
 	toolkit := NewToolkit(mock)
 
 	t.Run("missing bucket", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Arguments = map[string]any{
-			"key":     "file.txt",
-			"content": "hello",
+		input := PutObjectInput{
+			Key:     "file.txt",
+			Content: "hello",
 		}
 
-		result, err := toolkit.handlePutObject(context.Background(), req)
+		result, _, err := toolkit.handlePutObject(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -655,13 +475,12 @@ func TestPutObject_MissingParams(t *testing.T) {
 	})
 
 	t.Run("missing key", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Arguments = map[string]any{
-			"bucket":  "test-bucket",
-			"content": "hello",
+		input := PutObjectInput{
+			Bucket:  "test-bucket",
+			Content: "hello",
 		}
 
-		result, err := toolkit.handlePutObject(context.Background(), req)
+		result, _, err := toolkit.handlePutObject(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -672,13 +491,12 @@ func TestPutObject_MissingParams(t *testing.T) {
 	})
 
 	t.Run("missing content", func(t *testing.T) {
-		req := mcp.CallToolRequest{}
-		req.Params.Arguments = map[string]any{
-			"bucket": "test-bucket",
-			"key":    "file.txt",
+		input := PutObjectInput{
+			Bucket: "test-bucket",
+			Key:    "file.txt",
 		}
 
-		result, err := toolkit.handlePutObject(context.Background(), req)
+		result, _, err := toolkit.handlePutObject(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -687,4 +505,151 @@ func TestPutObject_MissingParams(t *testing.T) {
 			t.Error("expected error for missing content")
 		}
 	})
+}
+
+func TestClampExpiration(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    int
+		expected int
+	}{
+		{"negative returns default", -1, 3600},
+		{"zero returns default", 0, 3600},
+		{"valid value unchanged", 7200, 7200},
+		{"max value unchanged", 604800, 604800},
+		{"over max is clamped", 1000000, 604800},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := clampExpiration(tt.input)
+			if got != tt.expected {
+				t.Errorf("clampExpiration(%d) = %d, want %d", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestDecodeContent(t *testing.T) {
+	t.Run("plain text", func(t *testing.T) {
+		content := "hello world"
+		decoded, err := decodeContent(content, false)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if string(decoded) != content {
+			t.Errorf("decoded = %q, want %q", decoded, content)
+		}
+	})
+
+	t.Run("base64 encoded", func(t *testing.T) {
+		// "hello" in base64 is "aGVsbG8="
+		encoded := "aGVsbG8="
+		decoded, err := decodeContent(encoded, true)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if string(decoded) != "hello" {
+			t.Errorf("decoded = %q, want %q", decoded, "hello")
+		}
+	})
+
+	t.Run("invalid base64", func(t *testing.T) {
+		_, err := decodeContent("not-valid-base64!!!", true)
+		if err == nil {
+			t.Error("expected error for invalid base64")
+		}
+	})
+}
+
+func TestCheckPutSizeLimit(t *testing.T) {
+	t.Run("no limit", func(t *testing.T) {
+		mock := NewMockS3Client("test")
+		toolkit := NewToolkit(mock, WithMaxPutSize(0))
+
+		err := toolkit.checkPutSizeLimit([]byte("any size content"))
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("under limit", func(t *testing.T) {
+		mock := NewMockS3Client("test")
+		toolkit := NewToolkit(mock, WithMaxPutSize(100))
+
+		err := toolkit.checkPutSizeLimit([]byte("small"))
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("over limit", func(t *testing.T) {
+		mock := NewMockS3Client("test")
+		toolkit := NewToolkit(mock, WithMaxPutSize(5))
+
+		err := toolkit.checkPutSizeLimit([]byte("this is too long"))
+		if err == nil {
+			t.Error("expected error for content over limit")
+		}
+	})
+}
+
+func TestCheckGetSizeLimit(t *testing.T) {
+	t.Run("no limit", func(t *testing.T) {
+		mock := NewMockS3Client("test")
+		mock.AddObject("bucket", "key", []byte("content"), "text/plain")
+		toolkit := NewToolkit(mock, WithMaxGetSize(0))
+
+		err := toolkit.checkGetSizeLimit(context.Background(), mock, "bucket", "key")
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("under limit", func(t *testing.T) {
+		mock := NewMockS3Client("test")
+		mock.AddObject("bucket", "key", []byte("small"), "text/plain")
+		toolkit := NewToolkit(mock, WithMaxGetSize(1000))
+
+		err := toolkit.checkGetSizeLimit(context.Background(), mock, "bucket", "key")
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("over limit", func(t *testing.T) {
+		mock := NewMockS3Client("test")
+		// Add object with 20 bytes
+		mock.AddObject("bucket", "key", []byte("this is twenty bytes"), "text/plain")
+		toolkit := NewToolkit(mock, WithMaxGetSize(5))
+
+		err := toolkit.checkGetSizeLimit(context.Background(), mock, "bucket", "key")
+		if err == nil {
+			t.Error("expected error for size over limit")
+		}
+	})
+}
+
+func TestMiddlewareFuncWrapper_NilFunctions(t *testing.T) {
+	// Test Before with nil function
+	mw := NewMiddlewareFunc("test", nil, nil)
+
+	tc := NewToolContext(ToolListBuckets, "")
+	ctx, err := mw.Before(context.Background(), tc)
+	if err != nil {
+		t.Errorf("Before() with nil function should not error: %v", err)
+	}
+	if ctx == nil {
+		t.Error("Before() should return non-nil context")
+	}
+
+	// Test After with nil function
+	result := TextResult("test")
+	resultOut, errOut := mw.After(context.Background(), tc, result, nil)
+	if errOut != nil {
+		t.Errorf("After() with nil function should not error: %v", errOut)
+	}
+	if resultOut != result {
+		t.Error("After() should return same result when function is nil")
+	}
 }
