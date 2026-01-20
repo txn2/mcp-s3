@@ -117,13 +117,14 @@ func (t *Toolkit) RegisterWith(server *mcp.Server, name ToolName, opts ...ToolOp
 
 // registerTool dispatches to the appropriate tool registration method.
 func (t *Toolkit) registerTool(server *mcp.Server, name ToolName, cfg *toolConfig) {
-	if t.registeredTools[name] {
-		return // Prevent duplicate registration
-	}
-	if t.isToolDisabled(name) {
+	if t.registeredTools[name] || t.isToolDisabled(name) {
 		return
 	}
+	t.dispatchToolRegistration(server, name, cfg)
+	t.registeredTools[name] = true
+}
 
+func (t *Toolkit) dispatchToolRegistration(server *mcp.Server, name ToolName, cfg *toolConfig) {
 	switch name {
 	case ToolListBuckets:
 		t.registerListBucketsTool(server, cfg)
@@ -144,8 +145,6 @@ func (t *Toolkit) registerTool(server *mcp.Server, name ToolName, cfg *toolConfi
 	case ToolListConnections:
 		t.registerListConnectionsTool(server, cfg)
 	}
-
-	t.registeredTools[name] = true
 }
 
 // RegisterTools registers all S3 tools with the MCP server (backward compatibility).
@@ -265,15 +264,7 @@ func (t *Toolkit) wrapHandler(
 	handler func(context.Context, *mcp.CallToolRequest, any) (*mcp.CallToolResult, any, error),
 	cfg *toolConfig,
 ) func(context.Context, *mcp.CallToolRequest, any) (*mcp.CallToolResult, any, error) {
-	// Collect all applicable middlewares
-	var allMiddlewares []ToolMiddleware
-	allMiddlewares = append(allMiddlewares, t.middleware.All()...)
-	if perTool, ok := t.toolMiddlewares[toolName]; ok {
-		allMiddlewares = append(allMiddlewares, perTool...)
-	}
-	if cfg != nil {
-		allMiddlewares = append(allMiddlewares, cfg.middlewares...)
-	}
+	allMiddlewares := t.collectMiddlewares(toolName, cfg)
 
 	// Zero-overhead optimization: if no middleware/interceptors/transformers, return handler unchanged
 	if len(allMiddlewares) == 0 && len(t.interceptors.All()) == 0 && len(t.transformers.All()) == 0 {
@@ -281,56 +272,83 @@ func (t *Toolkit) wrapHandler(
 	}
 
 	return func(ctx context.Context, req *mcp.CallToolRequest, input any) (*mcp.CallToolResult, any, error) {
-		// Create tool context
-		connectionName := t.defaultConnection
-		tc := NewToolContext(toolName, connectionName)
-		tc.StartTime = time.Now()
+		tc := t.createToolContext(toolName)
 		ctx = WithToolContext(ctx, tc)
 
-		// Run interceptors
-		interceptResult := t.interceptors.Intercept(ctx, tc, req)
-		if !interceptResult.Allow {
-			t.logger.Warn("request blocked by interceptor",
-				"tool", toolName,
-				"reason", interceptResult.Reason)
-			return ErrorResultf("access denied: %s", interceptResult.Reason), nil, nil
+		req, blocked := t.runInterceptors(ctx, tc, req, toolName)
+		if blocked != nil {
+			return blocked, nil, nil
 		}
 
-		// Apply any request modifications
-		if interceptResult.ModifiedRequest != nil {
-			req = interceptResult.ModifiedRequest
+		ctx, err := t.runBeforeHooks(ctx, tc, allMiddlewares)
+		if err != nil {
+			return ErrorResult(err.Error()), nil, nil
 		}
 
-		// Run Before hooks (in order)
-		var err error
-		for _, m := range allMiddlewares {
-			ctx, err = m.Before(ctx, tc)
-			if err != nil {
-				return ErrorResult(err.Error()), nil, nil
-			}
-		}
-
-		// Execute handler
 		result, extra, handlerErr := handler(ctx, req, input)
-
-		// Run After hooks (reverse order - like defer)
-		for i := len(allMiddlewares) - 1; i >= 0; i-- {
-			result, err = allMiddlewares[i].After(ctx, tc, result, handlerErr)
-			if err != nil {
-				handlerErr = err
-			}
-		}
-
-		// Apply transformers
-		if result != nil {
-			result, err = t.transformers.Transform(ctx, tc, result)
-			if err != nil {
-				return ErrorResultf("transformer error: %v", err), nil, nil
-			}
+		result = t.runAfterHooks(ctx, tc, result, handlerErr, allMiddlewares)
+		result, err = t.applyTransformers(ctx, tc, result)
+		if err != nil {
+			return ErrorResultf("transformer error: %v", err), nil, nil
 		}
 
 		return result, extra, nil
 	}
+}
+
+func (t *Toolkit) collectMiddlewares(toolName ToolName, cfg *toolConfig) []ToolMiddleware {
+	var all []ToolMiddleware
+	all = append(all, t.middleware.All()...)
+	if perTool, ok := t.toolMiddlewares[toolName]; ok {
+		all = append(all, perTool...)
+	}
+	if cfg != nil {
+		all = append(all, cfg.middlewares...)
+	}
+	return all
+}
+
+func (t *Toolkit) createToolContext(toolName ToolName) *ToolContext {
+	tc := NewToolContext(toolName, t.defaultConnection)
+	tc.StartTime = time.Now()
+	return tc
+}
+
+func (t *Toolkit) runInterceptors(ctx context.Context, tc *ToolContext, req *mcp.CallToolRequest, toolName ToolName) (*mcp.CallToolRequest, *mcp.CallToolResult) {
+	interceptResult := t.interceptors.Intercept(ctx, tc, req)
+	if !interceptResult.Allow {
+		t.logger.Warn("request blocked by interceptor", "tool", toolName, "reason", interceptResult.Reason)
+		return nil, ErrorResultf("access denied: %s", interceptResult.Reason)
+	}
+	if interceptResult.ModifiedRequest != nil {
+		return interceptResult.ModifiedRequest, nil
+	}
+	return req, nil
+}
+
+func (t *Toolkit) runBeforeHooks(ctx context.Context, tc *ToolContext, middlewares []ToolMiddleware) (context.Context, error) {
+	var err error
+	for _, m := range middlewares {
+		ctx, err = m.Before(ctx, tc)
+		if err != nil {
+			return ctx, err
+		}
+	}
+	return ctx, nil
+}
+
+func (t *Toolkit) runAfterHooks(ctx context.Context, tc *ToolContext, result *mcp.CallToolResult, handlerErr error, middlewares []ToolMiddleware) *mcp.CallToolResult {
+	for i := len(middlewares) - 1; i >= 0; i-- {
+		result, _ = middlewares[i].After(ctx, tc, result, handlerErr)
+	}
+	return result
+}
+
+func (t *Toolkit) applyTransformers(ctx context.Context, tc *ToolContext, result *mcp.CallToolResult) (*mcp.CallToolResult, error) {
+	if result == nil {
+		return nil, nil
+	}
+	return t.transformers.Transform(ctx, tc, result)
 }
 
 // Close closes all S3 clients managed by the toolkit.
