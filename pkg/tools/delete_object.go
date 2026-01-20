@@ -3,8 +3,7 @@ package tools
 import (
 	"context"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // DeleteObjectResult represents the result of deleting an object.
@@ -14,78 +13,63 @@ type DeleteObjectResult struct {
 	Deleted bool   `json:"deleted"`
 }
 
-// registerDeleteObject registers the s3_delete_object tool.
-func (t *Toolkit) registerDeleteObject(s *server.MCPServer) {
-	tool := mcp.Tool{
-		Name:        t.toolName(ToolDeleteObject),
-		Description: "Delete an object from S3. This operation is irreversible unless versioning is enabled on the bucket. This operation may be blocked in read-only mode.",
-		InputSchema: mcp.ToolInputSchema{
-			Type:     "object",
-			Required: []string{"bucket", "key"},
-			Properties: map[string]any{
-				"bucket": map[string]any{
-					"type":        "string",
-					"description": "Name of the S3 bucket containing the object to delete.",
-				},
-				"key": map[string]any{
-					"type":        "string",
-					"description": "Key (path) of the object to delete.",
-				},
-				"connection": map[string]any{
-					"type":        "string",
-					"description": "Name of the S3 connection to use. If not specified, uses the default connection.",
-				},
-			},
-		},
+// registerDeleteObjectTool registers the s3_delete_object tool.
+func (t *Toolkit) registerDeleteObjectTool(server *mcp.Server, cfg *toolConfig) {
+	baseHandler := func(ctx context.Context, req *mcp.CallToolRequest, input any) (*mcp.CallToolResult, any, error) {
+		deleteInput, ok := input.(DeleteObjectInput)
+		if !ok {
+			return ErrorResult("internal error: invalid input type"), nil, nil
+		}
+		return t.handleDeleteObject(ctx, req, deleteInput)
 	}
 
-	t.registerTool(s, tool, t.handleDeleteObject)
+	wrappedHandler := t.wrapHandler(ToolDeleteObject, baseHandler, cfg)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        t.toolName(ToolDeleteObject),
+		Description: "Delete an object from S3. This operation is irreversible unless versioning is enabled on the bucket. This operation may be blocked in read-only mode.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input DeleteObjectInput) (*mcp.CallToolResult, any, error) {
+		return wrappedHandler(ctx, req, input)
+	})
 }
 
 // handleDeleteObject handles the s3_delete_object tool request.
-func (t *Toolkit) handleDeleteObject(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (t *Toolkit) handleDeleteObject(ctx context.Context, _ *mcp.CallToolRequest, input DeleteObjectInput) (*mcp.CallToolResult, any, error) {
 	// Check read-only mode
 	if t.readOnly {
-		return ErrorResult(ErrReadOnly), nil
+		return ErrorResult(ErrReadOnly.Error()), nil, nil
 	}
 
-	// Extract arguments
-	args, err := GetArgs(request)
-	if err != nil {
-		return ErrorResult(err), nil
+	// Validate required parameters
+	if input.Bucket == "" {
+		return ErrorResult("bucket parameter is required"), nil, nil
 	}
-
-	// Extract parameters
-	bucket, err := RequireString(args, "bucket")
-	if err != nil {
-		return ErrorResult(err), nil
+	if input.Key == "" {
+		return ErrorResult("key parameter is required"), nil, nil
 	}
-
-	key, err := RequireString(args, "key")
-	if err != nil {
-		return ErrorResult(err), nil
-	}
-
-	connectionName := OptionalString(args, "connection", "")
 
 	// Get client
-	client, err := t.GetClient(connectionName)
+	client, err := t.GetClient(input.Connection)
 	if err != nil {
-		return ErrorResult(err), nil
+		return ErrorResult(err.Error()), nil, nil
 	}
 
 	// Delete object
-	err = client.DeleteObject(ctx, bucket, key)
+	err = client.DeleteObject(ctx, input.Bucket, input.Key)
 	if err != nil {
-		return ErrorResultf("failed to delete object: %v", err), nil
+		return ErrorResultf("failed to delete object: %v", err), nil, nil
 	}
 
 	// Build result
 	result := DeleteObjectResult{
-		Bucket:  bucket,
-		Key:     key,
+		Bucket:  input.Bucket,
+		Key:     input.Key,
 		Deleted: true,
 	}
 
-	return JSONResult(result)
+	jsonResult, err := JSONResult(result)
+	if err != nil {
+		return ErrorResultf("failed to format result: %v", err), nil, nil
+	}
+	return jsonResult, nil, nil
 }
