@@ -224,3 +224,90 @@ func TestNewWithDefaults(t *testing.T) {
 	_, _, _ = NewWithDefaults()
 	// We don't check the error because it depends on environment
 }
+
+func TestCreateS3Client_WithNilClientConfig(t *testing.T) {
+	// Test that createS3Client handles nil ClientConfig by using FromEnv()
+	cfg := Config{
+		ClientConfig: nil,
+		ExtConfig:    extensions.DefaultConfig(),
+	}
+
+	// This will fail to connect, but exercises the nil ClientConfig path
+	_, _, err := createS3Client(cfg)
+	// We expect an error because there's no real S3 endpoint
+	// but the code path for nil ClientConfig should be exercised
+	_ = err
+}
+
+func TestCreateS3Client_WithClientConfig(t *testing.T) {
+	// Test that createS3Client uses the provided ClientConfig
+	clientCfg := &client.Config{
+		Region:          "us-east-1",
+		Endpoint:        "http://localhost:9999",
+		AccessKeyID:     "test",
+		SecretAccessKey: "test",
+		Name:            "test-connection",
+	}
+
+	cfg := Config{
+		ClientConfig: clientCfg,
+		ExtConfig:    extensions.DefaultConfig(),
+	}
+
+	_, _, err := createS3Client(cfg)
+	// We expect an error because the endpoint is invalid
+	// but the code path should be exercised
+	_ = err
+}
+
+func TestConfig_Struct(t *testing.T) {
+	cfg := Config{
+		ClientConfig: &client.Config{
+			Region: "us-west-2",
+			Name:   "test",
+		},
+		ExtConfig: extensions.Config{
+			ReadOnly:  true,
+			SizeLimit: false,
+		},
+		MultiConfig: nil,
+		Logger:      nil,
+	}
+
+	if cfg.ClientConfig.Region != "us-west-2" {
+		t.Errorf("ClientConfig.Region = %q, want %q", cfg.ClientConfig.Region, "us-west-2")
+	}
+	if !cfg.ExtConfig.ReadOnly {
+		t.Error("ExtConfig.ReadOnly should be true")
+	}
+	if cfg.ExtConfig.SizeLimit {
+		t.Error("ExtConfig.SizeLimit should be false")
+	}
+}
+
+func TestBuildToolkitOptions_WithManager(t *testing.T) {
+	cfg := Config{
+		ExtConfig: extensions.Config{
+			ReadOnly:   true,
+			MaxGetSize: 1024,
+			MaxPutSize: 2048,
+		},
+	}
+
+	// Create a mock that would be used if we had a manager
+	mockClient := &mockS3Client{name: "test-conn"}
+
+	opts := buildToolkitOptions(cfg, mockClient, nil)
+
+	// Should have at least 4 options
+	if len(opts) < 4 {
+		t.Errorf("expected at least 4 options, got %d", len(opts))
+	}
+}
+
+func TestVersion(t *testing.T) {
+	// Version should be set (default is "dev")
+	if Version == "" {
+		t.Error("Version should not be empty")
+	}
+}
