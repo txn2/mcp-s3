@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/txn2/mcp-s3/pkg/tools"
 )
@@ -108,83 +108,43 @@ func (m *AuditMiddleware) Name() string {
 	return "audit"
 }
 
-// Wrap wraps the handler with audit logging.
-func (m *AuditMiddleware) Wrap(next tools.ToolHandler) tools.ToolHandler {
-	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		tc := tools.GetToolContext(ctx)
-
-		args, _ := request.Params.Arguments.(map[string]any)
-		entry := AuditEntry{
-			Timestamp: time.Now().UTC(),
-			Tool:      request.Params.Name,
-			Arguments: sanitizeArguments(args),
-		}
-
-		if tc != nil {
-			entry.Connection = tc.ConnectionName
-			entry.RequestID = tc.RequestID
-		}
-
-		start := time.Now()
-		result, err := next(ctx, request)
-		entry.Duration = time.Since(start)
-		entry.DurationMs = float64(entry.Duration) / float64(time.Millisecond)
-
-		if err != nil {
-			entry.Success = false
-			entry.Error = err.Error()
-		} else if result != nil && result.IsError {
-			entry.Success = false
-			// Try to extract error message from result
-			if len(result.Content) > 0 {
-				if text, ok := result.Content[0].(mcp.TextContent); ok {
-					entry.Error = text.Text
-				}
-			}
-		} else {
-			entry.Success = true
-		}
-
-		// Log the entry (ignore errors for now)
-		_ = m.logger.Log(entry)
-
-		return result, err
-	}
+// Before stores the start time in context for duration calculation.
+func (m *AuditMiddleware) Before(ctx context.Context, tc *tools.ToolContext) (context.Context, error) {
+	// StartTime is already set in ToolContext
+	return ctx, nil
 }
 
-// sanitizeArguments removes sensitive data from arguments for logging.
-func sanitizeArguments(args map[string]any) map[string]any {
-	if args == nil {
-		return nil
+// After logs the audit entry after handler execution.
+func (m *AuditMiddleware) After(ctx context.Context, tc *tools.ToolContext, result *mcp.CallToolResult, handlerErr error) (*mcp.CallToolResult, error) {
+	entry := AuditEntry{
+		Timestamp:  time.Now().UTC(),
+		Tool:       string(tc.ToolName),
+		Connection: tc.ConnectionName,
+		RequestID:  tc.RequestID,
 	}
 
-	result := make(map[string]any, len(args))
-	for k, v := range args {
-		switch k {
-		case "content":
-			// Don't log full content, just indicate presence
-			if s, ok := v.(string); ok {
-				result[k] = len(s)
-			} else {
-				result[k] = "[content]"
+	entry.Duration = time.Since(tc.StartTime)
+	entry.DurationMs = float64(entry.Duration) / float64(time.Millisecond)
+
+	if handlerErr != nil {
+		entry.Success = false
+		entry.Error = handlerErr.Error()
+	} else if result != nil && result.IsError {
+		entry.Success = false
+		// Try to extract error message from result
+		if len(result.Content) > 0 {
+			if text, ok := result.Content[0].(*mcp.TextContent); ok {
+				entry.Error = text.Text
 			}
-		case "metadata":
-			// Include metadata keys but not values
-			if m, ok := v.(map[string]any); ok {
-				keys := make([]string, 0, len(m))
-				for key := range m {
-					keys = append(keys, key)
-				}
-				result[k] = keys
-			} else {
-				result[k] = "[metadata]"
-			}
-		default:
-			result[k] = v
 		}
+	} else {
+		entry.Success = true
 	}
 
-	return result
+	// Log the entry (ignore errors for now)
+	_ = m.logger.Log(entry)
+
+	return result, handlerErr
 }
 
 // Ensure AuditMiddleware implements ToolMiddleware.
