@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/txn2/mcp-s3/pkg/client"
 	"github.com/txn2/mcp-s3/pkg/extensions"
@@ -58,8 +58,11 @@ func FromEnv() Config {
 }
 
 // New creates a new MCP S3 server with the given configuration.
-func New(cfg Config) (*server.MCPServer, *tools.Toolkit, error) {
-	mcpServer := server.NewMCPServer("mcp-s3", Version, server.WithLogging())
+func New(cfg Config) (*mcp.Server, *tools.Toolkit, error) {
+	mcpServer := mcp.NewServer(&mcp.Implementation{
+		Name:    "mcp-s3",
+		Version: Version,
+	}, nil)
 
 	s3Client, manager, err := createS3Client(cfg)
 	if err != nil {
@@ -68,7 +71,7 @@ func New(cfg Config) (*server.MCPServer, *tools.Toolkit, error) {
 
 	opts := buildToolkitOptions(cfg, s3Client, manager)
 	toolkit := tools.NewToolkit(s3Client, opts...)
-	toolkit.RegisterTools(mcpServer)
+	toolkit.RegisterAll(mcpServer)
 
 	return mcpServer, toolkit, nil
 }
@@ -146,6 +149,6 @@ func appendExtensionOptions(opts []tools.Option, cfg Config) []tools.Option {
 }
 
 // NewWithDefaults creates a new MCP S3 server with default configuration from environment.
-func NewWithDefaults() (*server.MCPServer, *tools.Toolkit, error) {
+func NewWithDefaults() (*mcp.Server, *tools.Toolkit, error) {
 	return New(FromEnv())
 }

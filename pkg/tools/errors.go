@@ -4,9 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Common error types for S3 tools.
@@ -31,12 +30,11 @@ var (
 )
 
 // ErrorResult creates an MCP CallToolResult with an error message.
-func ErrorResult(err error) *mcp.CallToolResult {
+func ErrorResult(message string) *mcp.CallToolResult {
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
-			mcp.TextContent{
-				Type: "text",
-				Text: fmt.Sprintf("Error: %s", err.Error()),
+			&mcp.TextContent{
+				Text: fmt.Sprintf("Error: %s", message),
 			},
 		},
 		IsError: true,
@@ -47,8 +45,7 @@ func ErrorResult(err error) *mcp.CallToolResult {
 func ErrorResultf(format string, args ...any) *mcp.CallToolResult {
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
-			mcp.TextContent{
-				Type: "text",
+			&mcp.TextContent{
 				Text: fmt.Sprintf("Error: "+format, args...),
 			},
 		},
@@ -60,8 +57,7 @@ func ErrorResultf(format string, args ...any) *mcp.CallToolResult {
 func TextResult(text string) *mcp.CallToolResult {
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
-			mcp.TextContent{
-				Type: "text",
+			&mcp.TextContent{
 				Text: text,
 			},
 		},
@@ -77,126 +73,9 @@ func JSONResult(data any) (*mcp.CallToolResult, error) {
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
-			mcp.TextContent{
-				Type: "text",
+			&mcp.TextContent{
 				Text: string(jsonBytes),
 			},
 		},
 	}, nil
-}
-
-// GetArgs extracts the arguments map from the request.
-// Returns an error if the arguments are not a map.
-func GetArgs(request mcp.CallToolRequest) (map[string]any, error) {
-	args, ok := request.Params.Arguments.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("%w: arguments must be an object", ErrInvalidParameter)
-	}
-	return args, nil
-}
-
-// RequireString extracts a required string parameter from the request arguments.
-// Returns an error if the parameter is missing or not a string.
-func RequireString(args map[string]any, key string) (string, error) {
-	val, ok := args[key]
-	if !ok {
-		return "", fmt.Errorf("%w: %s", ErrMissingParameter, key)
-	}
-
-	str, ok := val.(string)
-	if !ok {
-		return "", fmt.Errorf("%w: %s must be a string", ErrInvalidParameter, key)
-	}
-
-	if str == "" {
-		return "", fmt.Errorf("%w: %s cannot be empty", ErrInvalidParameter, key)
-	}
-
-	return str, nil
-}
-
-// OptionalString extracts an optional string parameter from the request arguments.
-// Returns the default value if the parameter is missing.
-func OptionalString(args map[string]any, key string, defaultValue string) string {
-	val, ok := args[key]
-	if !ok {
-		return defaultValue
-	}
-
-	str, ok := val.(string)
-	if !ok {
-		return defaultValue
-	}
-
-	return str
-}
-
-// OptionalInt extracts an optional integer parameter from the request arguments.
-// Returns the default value if the parameter is missing.
-func OptionalInt(args map[string]any, key string, defaultValue int) int {
-	val, ok := args[key]
-	if !ok {
-		return defaultValue
-	}
-
-	switch v := val.(type) {
-	case int:
-		return v
-	case int32:
-		return int(v)
-	case int64:
-		return int(v)
-	case float64:
-		return int(v)
-	default:
-		return defaultValue
-	}
-}
-
-// OptionalInt32 extracts an optional int32 parameter from the request arguments.
-func OptionalInt32(args map[string]any, key string, defaultValue int32) int32 {
-	v := OptionalInt(args, key, int(defaultValue))
-	// Clamp to int32 range to prevent overflow
-	if v > math.MaxInt32 {
-		return math.MaxInt32
-	}
-	if v < math.MinInt32 {
-		return math.MinInt32
-	}
-	return int32(v)
-}
-
-// OptionalBool extracts an optional boolean parameter from the request arguments.
-// Returns the default value if the parameter is missing.
-func OptionalBool(args map[string]any, key string, defaultValue bool) bool {
-	val, ok := args[key]
-	if !ok {
-		return defaultValue
-	}
-
-	b, ok := val.(bool)
-	if !ok {
-		return defaultValue
-	}
-
-	return b
-}
-
-// OptionalMetadata extracts an optional metadata map from the request arguments.
-func OptionalMetadata(args map[string]any, key string) map[string]string {
-	metaVal, ok := args[key]
-	if !ok {
-		return nil
-	}
-	metaMap, ok := metaVal.(map[string]any)
-	if !ok {
-		return nil
-	}
-	metadata := make(map[string]string)
-	for k, v := range metaMap {
-		if strVal, ok := v.(string); ok {
-			metadata[k] = strVal
-		}
-	}
-	return metadata
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/txn2/mcp-s3/pkg/tools"
 )
@@ -29,10 +29,10 @@ func (i *PrefixACLInterceptor) Name() string {
 }
 
 // Intercept checks if the requested key prefix is allowed.
-func (i *PrefixACLInterceptor) Intercept(ctx context.Context, tc *tools.ToolContext, request mcp.CallToolRequest) tools.InterceptResult {
+func (i *PrefixACLInterceptor) Intercept(ctx context.Context, tc *tools.ToolContext, request *mcp.CallToolRequest) tools.InterceptResult {
 	// Get arguments
-	args, ok := request.Params.Arguments.(map[string]any)
-	if !ok {
+	args, err := extractArgsFromRequest(request)
+	if err != nil || args == nil {
 		return tools.Allowed()
 	}
 
@@ -67,7 +67,7 @@ func (i *PrefixACLInterceptor) Intercept(ctx context.Context, tc *tools.ToolCont
 }
 
 // extractKey extracts the object key from the request arguments based on the tool.
-func (i *PrefixACLInterceptor) extractKey(toolName string, args map[string]any) string {
+func (i *PrefixACLInterceptor) extractKey(toolName tools.ToolName, args map[string]any) string {
 	switch toolName {
 	case tools.ToolGetObject, tools.ToolGetObjectMetadata, tools.ToolPutObject, tools.ToolDeleteObject, tools.ToolPresignURL:
 		if key, ok := args["key"].(string); ok {

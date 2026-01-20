@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/txn2/mcp-s3/pkg/tools"
 )
@@ -194,20 +194,19 @@ func (m *MetricsMiddleware) Name() string {
 	return "metrics"
 }
 
-// Wrap wraps the handler with metrics tracking.
-func (m *MetricsMiddleware) Wrap(next tools.ToolHandler) tools.ToolHandler {
-	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		start := time.Now()
+// Before is a no-op for metrics; start time is tracked in ToolContext.
+func (m *MetricsMiddleware) Before(ctx context.Context, tc *tools.ToolContext) (context.Context, error) {
+	return ctx, nil
+}
 
-		result, err := next(ctx, request)
+// After records metrics for the tool call.
+func (m *MetricsMiddleware) After(ctx context.Context, tc *tools.ToolContext, result *mcp.CallToolResult, handlerErr error) (*mcp.CallToolResult, error) {
+	duration := time.Since(tc.StartTime)
+	isError := handlerErr != nil || (result != nil && result.IsError)
 
-		duration := time.Since(start)
-		isError := err != nil || (result != nil && result.IsError)
+	m.metrics.RecordCall(string(tc.ToolName), duration, isError)
 
-		m.metrics.RecordCall(request.Params.Name, duration, isError)
-
-		return result, err
-	}
+	return result, handlerErr
 }
 
 // Ensure MetricsMiddleware implements ToolMiddleware.

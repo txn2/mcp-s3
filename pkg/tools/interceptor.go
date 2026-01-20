@@ -3,7 +3,7 @@ package tools
 import (
 	"context"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // InterceptResult represents the result of a request interception.
@@ -48,17 +48,17 @@ type RequestInterceptor interface {
 
 	// Intercept examines the request and returns an InterceptResult.
 	// Called before the tool handler executes.
-	Intercept(ctx context.Context, tc *ToolContext, request mcp.CallToolRequest) InterceptResult
+	Intercept(ctx context.Context, tc *ToolContext, request *mcp.CallToolRequest) InterceptResult
 }
 
 // RequestInterceptorFunc is a function type that implements RequestInterceptor.
 type RequestInterceptorFunc struct {
 	name        string
-	interceptFn func(context.Context, *ToolContext, mcp.CallToolRequest) InterceptResult
+	interceptFn func(context.Context, *ToolContext, *mcp.CallToolRequest) InterceptResult
 }
 
 // NewRequestInterceptorFunc creates a new RequestInterceptorFunc.
-func NewRequestInterceptorFunc(name string, fn func(context.Context, *ToolContext, mcp.CallToolRequest) InterceptResult) *RequestInterceptorFunc {
+func NewRequestInterceptorFunc(name string, fn func(context.Context, *ToolContext, *mcp.CallToolRequest) InterceptResult) *RequestInterceptorFunc {
 	return &RequestInterceptorFunc{
 		name:        name,
 		interceptFn: fn,
@@ -71,7 +71,7 @@ func (i *RequestInterceptorFunc) Name() string {
 }
 
 // Intercept calls the underlying function.
-func (i *RequestInterceptorFunc) Intercept(ctx context.Context, tc *ToolContext, request mcp.CallToolRequest) InterceptResult {
+func (i *RequestInterceptorFunc) Intercept(ctx context.Context, tc *ToolContext, request *mcp.CallToolRequest) InterceptResult {
 	return i.interceptFn(ctx, tc, request)
 }
 
@@ -94,7 +94,7 @@ func (c *InterceptorChain) Add(i RequestInterceptor) {
 
 // Intercept runs all interceptors in order.
 // Returns the first blocking result, or allows if all pass.
-func (c *InterceptorChain) Intercept(ctx context.Context, tc *ToolContext, request mcp.CallToolRequest) InterceptResult {
+func (c *InterceptorChain) Intercept(ctx context.Context, tc *ToolContext, request *mcp.CallToolRequest) InterceptResult {
 	currentReq := request
 
 	for _, interceptor := range c.interceptors {
@@ -104,20 +104,13 @@ func (c *InterceptorChain) Intercept(ctx context.Context, tc *ToolContext, reque
 		}
 		// Apply any modifications
 		if result.ModifiedRequest != nil {
-			currentReq = *result.ModifiedRequest
+			currentReq = result.ModifiedRequest
 		}
 	}
 
 	// All interceptors passed - check if request was modified
-	if currentReq.Params.Name != request.Params.Name {
-		return AllowedWithModification(&currentReq)
-	}
-
-	// Check if arguments were modified by comparing the pointers
-	currentArgs, _ := currentReq.Params.Arguments.(map[string]any)
-	originalArgs, _ := request.Params.Arguments.(map[string]any)
-	if currentArgs != nil && originalArgs != nil && len(currentArgs) != len(originalArgs) {
-		return AllowedWithModification(&currentReq)
+	if currentReq != request {
+		return AllowedWithModification(currentReq)
 	}
 
 	return Allowed()

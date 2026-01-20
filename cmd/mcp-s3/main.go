@@ -2,10 +2,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	mcps3 "github.com/txn2/mcp-s3/internal/server"
 )
@@ -18,6 +21,18 @@ func main() {
 }
 
 func run() error {
+	// Set up context with cancellation
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Set up signal handling for graceful shutdown
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		cancel()
+	}()
+
 	// Create the server with defaults from environment
 	mcpServer, toolkit, err := mcps3.NewWithDefaults()
 	if err != nil {
@@ -26,7 +41,7 @@ func run() error {
 	defer func() { _ = toolkit.Close() }()
 
 	// Start the server using stdio transport
-	if err := server.ServeStdio(mcpServer); err != nil {
+	if err := mcpServer.Run(ctx, &mcp.StdioTransport{}); err != nil {
 		return fmt.Errorf("server error: %w", err)
 	}
 

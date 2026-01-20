@@ -3,8 +3,7 @@ package tools
 import (
 	"context"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // ListConnectionsResult represents the result of listing connections.
@@ -21,22 +20,28 @@ type ConnectionInfo struct {
 	Endpoint string `json:"endpoint,omitempty"`
 }
 
-// registerListConnections registers the s3_list_connections tool.
-func (t *Toolkit) registerListConnections(s *server.MCPServer) {
-	tool := mcp.Tool{
-		Name:        t.toolName(ToolListConnections),
-		Description: "List all configured S3 connections. Returns connection names, regions, and endpoints (if custom endpoints are configured).",
-		InputSchema: mcp.ToolInputSchema{
-			Type:       "object",
-			Properties: map[string]any{},
-		},
+// registerListConnectionsTool registers the s3_list_connections tool.
+func (t *Toolkit) registerListConnectionsTool(server *mcp.Server, cfg *toolConfig) {
+	baseHandler := func(ctx context.Context, req *mcp.CallToolRequest, input any) (*mcp.CallToolResult, any, error) {
+		_, ok := input.(ListConnectionsInput)
+		if !ok {
+			return ErrorResult("internal error: invalid input type"), nil, nil
+		}
+		return t.handleListConnections(ctx, req)
 	}
 
-	t.registerTool(s, tool, t.handleListConnections)
+	wrappedHandler := t.wrapHandler(ToolListConnections, baseHandler, cfg)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        t.toolName(ToolListConnections),
+		Description: "List all configured S3 connections. Returns connection names, regions, and endpoints (if custom endpoints are configured).",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input ListConnectionsInput) (*mcp.CallToolResult, any, error) {
+		return wrappedHandler(ctx, req, input)
+	})
 }
 
 // handleListConnections handles the s3_list_connections tool request.
-func (t *Toolkit) handleListConnections(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (t *Toolkit) handleListConnections(ctx context.Context, _ *mcp.CallToolRequest) (*mcp.CallToolResult, any, error) {
 	connections := t.ListConnections()
 
 	result := ListConnectionsResult{
@@ -64,5 +69,9 @@ func (t *Toolkit) handleListConnections(ctx context.Context, request mcp.CallToo
 		result.Connections = append(result.Connections, info)
 	}
 
-	return JSONResult(result)
+	jsonResult, err := JSONResult(result)
+	if err != nil {
+		return ErrorResultf("failed to format result: %v", err), nil, nil
+	}
+	return jsonResult, nil, nil
 }

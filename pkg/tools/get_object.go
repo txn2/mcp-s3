@@ -7,8 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/txn2/mcp-s3/pkg/client"
 )
@@ -27,81 +26,60 @@ type GetObjectResult struct {
 	Truncated    bool              `json:"truncated"`
 }
 
-// registerGetObject registers the s3_get_object tool.
-func (t *Toolkit) registerGetObject(s *server.MCPServer) {
-	tool := mcp.Tool{
-		Name:        t.toolName(ToolGetObject),
-		Description: "Retrieve the content of an S3 object. For text content, returns the content directly. For binary content, returns base64-encoded data. Large objects may be truncated based on size limits.",
-		InputSchema: mcp.ToolInputSchema{
-			Type:     "object",
-			Required: []string{"bucket", "key"},
-			Properties: map[string]any{
-				"bucket": map[string]any{
-					"type":        "string",
-					"description": "Name of the S3 bucket containing the object.",
-				},
-				"key": map[string]any{
-					"type":        "string",
-					"description": "Key (path) of the object to retrieve.",
-				},
-				"connection": map[string]any{
-					"type":        "string",
-					"description": "Name of the S3 connection to use. If not specified, uses the default connection.",
-				},
-			},
-		},
+// registerGetObjectTool registers the s3_get_object tool.
+func (t *Toolkit) registerGetObjectTool(server *mcp.Server, cfg *toolConfig) {
+	baseHandler := func(ctx context.Context, req *mcp.CallToolRequest, input any) (*mcp.CallToolResult, any, error) {
+		getInput, ok := input.(GetObjectInput)
+		if !ok {
+			return ErrorResult("internal error: invalid input type"), nil, nil
+		}
+		return t.handleGetObject(ctx, req, getInput)
 	}
 
-	t.registerTool(s, tool, t.handleGetObject)
+	wrappedHandler := t.wrapHandler(ToolGetObject, baseHandler, cfg)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        t.toolName(ToolGetObject),
+		Description: "Retrieve the content of an S3 object. For text content, returns the content directly. For binary content, returns base64-encoded data. Large objects may be truncated based on size limits.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetObjectInput) (*mcp.CallToolResult, any, error) {
+		return wrappedHandler(ctx, req, input)
+	})
 }
 
 // handleGetObject handles the s3_get_object tool request.
-func (t *Toolkit) handleGetObject(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	args, err := GetArgs(request)
+func (t *Toolkit) handleGetObject(ctx context.Context, _ *mcp.CallToolRequest, input GetObjectInput) (*mcp.CallToolResult, any, error) {
+	// Validate required parameters
+	if input.Bucket == "" {
+		return ErrorResult("bucket parameter is required"), nil, nil
+	}
+	if input.Key == "" {
+		return ErrorResult("key parameter is required"), nil, nil
+	}
+
+	// Get client
+	s3Client, err := t.GetClient(input.Connection)
 	if err != nil {
-		return ErrorResult(err), nil
+		return ErrorResult(err.Error()), nil, nil
 	}
 
-	params, err := extractGetParams(args)
+	// Check size limit
+	if err := t.checkGetSizeLimit(ctx, s3Client, input.Bucket, input.Key); err != nil {
+		return ErrorResult(err.Error()), nil, nil
+	}
+
+	// Get object
+	content, err := s3Client.GetObject(ctx, input.Bucket, input.Key)
 	if err != nil {
-		return ErrorResult(err), nil
+		return ErrorResultf("failed to get object: %v", err), nil, nil
 	}
 
-	s3Client, err := t.GetClient(params.connection)
+	// Build result
+	result := buildGetResult(input.Bucket, input.Key, content)
+	jsonResult, err := JSONResult(result)
 	if err != nil {
-		return ErrorResult(err), nil
+		return ErrorResultf("failed to format result: %v", err), nil, nil
 	}
-
-	if err := t.checkGetSizeLimit(ctx, s3Client, params.bucket, params.key); err != nil {
-		return ErrorResult(err), nil
-	}
-
-	content, err := s3Client.GetObject(ctx, params.bucket, params.key)
-	if err != nil {
-		return ErrorResultf("failed to get object: %v", err), nil
-	}
-
-	return JSONResult(buildGetResult(params, content))
-}
-
-type getParams struct {
-	bucket, key, connection string
-}
-
-func extractGetParams(args map[string]any) (*getParams, error) {
-	bucket, err := RequireString(args, "bucket")
-	if err != nil {
-		return nil, err
-	}
-	key, err := RequireString(args, "key")
-	if err != nil {
-		return nil, err
-	}
-	return &getParams{
-		bucket:     bucket,
-		key:        key,
-		connection: OptionalString(args, "connection", ""),
-	}, nil
+	return jsonResult, nil, nil
 }
 
 func (t *Toolkit) checkGetSizeLimit(ctx context.Context, client S3Client, bucket, key string) error {
@@ -118,10 +96,10 @@ func (t *Toolkit) checkGetSizeLimit(ctx context.Context, client S3Client, bucket
 	return nil
 }
 
-func buildGetResult(params *getParams, content *client.ObjectContent) GetObjectResult {
+func buildGetResult(bucket, key string, content *client.ObjectContent) GetObjectResult {
 	result := GetObjectResult{
-		Bucket:      params.bucket,
-		Key:         params.key,
+		Bucket:      bucket,
+		Key:         key,
 		Size:        content.Size,
 		ContentType: content.ContentType,
 		ETag:        content.ETag,

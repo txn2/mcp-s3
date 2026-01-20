@@ -2,16 +2,27 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func TestInterceptResult_AllowedWithModification(t *testing.T) {
-	req := mcp.CallToolRequest{}
-	req.Params.Arguments = map[string]any{"key": "value"}
+func makeRequest(args map[string]any) *mcp.CallToolRequest {
+	req := &mcp.CallToolRequest{
+		Params: &mcp.CallToolParamsRaw{},
+	}
+	if args != nil {
+		argsJSON, _ := json.Marshal(args)
+		req.Params.Arguments = argsJSON
+	}
+	return req
+}
 
-	result := AllowedWithModification(&req)
+func TestInterceptResult_AllowedWithModification(t *testing.T) {
+	req := makeRequest(map[string]any{"key": "value"})
+
+	result := AllowedWithModification(req)
 
 	if !result.Allow {
 		t.Error("Allow should be true")
@@ -22,7 +33,7 @@ func TestInterceptResult_AllowedWithModification(t *testing.T) {
 }
 
 func TestRequestInterceptorFunc_Name(t *testing.T) {
-	interceptor := NewRequestInterceptorFunc("test-interceptor", func(ctx context.Context, tc *ToolContext, req mcp.CallToolRequest) InterceptResult {
+	interceptor := NewRequestInterceptorFunc("test-interceptor", func(ctx context.Context, tc *ToolContext, req *mcp.CallToolRequest) InterceptResult {
 		return Allowed()
 	})
 
@@ -34,10 +45,10 @@ func TestRequestInterceptorFunc_Name(t *testing.T) {
 func TestInterceptorChain_AllAndClear(t *testing.T) {
 	t.Run("all returns interceptors", func(t *testing.T) {
 		chain := NewInterceptorChain()
-		chain.Add(NewRequestInterceptorFunc("i1", func(ctx context.Context, tc *ToolContext, req mcp.CallToolRequest) InterceptResult {
+		chain.Add(NewRequestInterceptorFunc("i1", func(ctx context.Context, tc *ToolContext, req *mcp.CallToolRequest) InterceptResult {
 			return Allowed()
 		}))
-		chain.Add(NewRequestInterceptorFunc("i2", func(ctx context.Context, tc *ToolContext, req mcp.CallToolRequest) InterceptResult {
+		chain.Add(NewRequestInterceptorFunc("i2", func(ctx context.Context, tc *ToolContext, req *mcp.CallToolRequest) InterceptResult {
 			return Allowed()
 		}))
 
@@ -49,7 +60,7 @@ func TestInterceptorChain_AllAndClear(t *testing.T) {
 
 	t.Run("clear removes all", func(t *testing.T) {
 		chain := NewInterceptorChain()
-		chain.Add(NewRequestInterceptorFunc("i1", func(ctx context.Context, tc *ToolContext, req mcp.CallToolRequest) InterceptResult {
+		chain.Add(NewRequestInterceptorFunc("i1", func(ctx context.Context, tc *ToolContext, req *mcp.CallToolRequest) InterceptResult {
 			return Allowed()
 		}))
 
@@ -62,12 +73,12 @@ func TestInterceptorChain_AllAndClear(t *testing.T) {
 
 	t.Run("intercept blocks when interceptor blocks", func(t *testing.T) {
 		chain := NewInterceptorChain()
-		chain.Add(NewRequestInterceptorFunc("blocker", func(ctx context.Context, tc *ToolContext, req mcp.CallToolRequest) InterceptResult {
+		chain.Add(NewRequestInterceptorFunc("blocker", func(ctx context.Context, tc *ToolContext, req *mcp.CallToolRequest) InterceptResult {
 			return Blocked("not allowed")
 		}))
 
 		tc := NewToolContext("test", "conn")
-		req := mcp.CallToolRequest{}
+		req := makeRequest(nil)
 
 		result := chain.Intercept(context.Background(), tc, req)
 

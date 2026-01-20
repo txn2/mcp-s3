@@ -3,7 +3,7 @@ package extensions
 import (
 	"context"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/txn2/mcp-s3/pkg/tools"
 )
@@ -26,7 +26,7 @@ func (i *ReadOnlyInterceptor) Name() string {
 }
 
 // Intercept checks if the operation is a write and blocks it if read-only mode is enabled.
-func (i *ReadOnlyInterceptor) Intercept(ctx context.Context, tc *tools.ToolContext, request mcp.CallToolRequest) tools.InterceptResult {
+func (i *ReadOnlyInterceptor) Intercept(ctx context.Context, tc *tools.ToolContext, request *mcp.CallToolRequest) tools.InterceptResult {
 	if !i.enabled {
 		return tools.Allowed()
 	}

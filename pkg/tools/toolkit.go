@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Default size limits.
@@ -18,6 +18,21 @@ const (
 	// DefaultMaxPutSize is the default maximum size for object uploads (100MB).
 	DefaultMaxPutSize = 100 * 1024 * 1024
 )
+
+// toolConfig holds per-tool configuration for registration.
+type toolConfig struct {
+	middlewares []ToolMiddleware
+}
+
+// ToolOption configures a single tool registration.
+type ToolOption func(*toolConfig)
+
+// WithPerToolMiddleware adds middleware specific to this tool registration.
+func WithPerToolMiddleware(m ...ToolMiddleware) ToolOption {
+	return func(cfg *toolConfig) {
+		cfg.middlewares = append(cfg.middlewares, m...)
+	}
+}
 
 // Toolkit provides a collection of S3 MCP tools with extensibility support.
 type Toolkit struct {
@@ -33,12 +48,14 @@ type Toolkit struct {
 	maxGetSize        int64
 	maxPutSize        int64
 	toolPrefix        string
-	disabledTools     map[string]bool
+	disabledTools     map[ToolName]bool
 
 	// Extensibility
-	middleware   *ToolMiddlewareRegistry
-	interceptors *InterceptorChain
-	transformers *TransformerChain
+	middleware      *MiddlewareChain
+	toolMiddlewares map[ToolName][]ToolMiddleware
+	interceptors    *InterceptorChain
+	transformers    *TransformerChain
+	registeredTools map[ToolName]bool
 
 	// Logging
 	logger *slog.Logger
@@ -47,16 +64,18 @@ type Toolkit struct {
 // NewToolkit creates a new Toolkit with the given S3 client and options.
 func NewToolkit(client S3Client, opts ...Option) *Toolkit {
 	t := &Toolkit{
-		client:        client,
-		clients:       make(map[string]S3Client),
-		disabledTools: make(map[string]bool),
-		middleware:    NewToolMiddlewareRegistry(),
-		interceptors:  NewInterceptorChain(),
-		transformers:  NewTransformerChain(),
-		maxGetSize:    DefaultMaxGetSize,
-		maxPutSize:    DefaultMaxPutSize,
-		readOnly:      false,
-		logger:        defaultLogger(),
+		client:          client,
+		clients:         make(map[string]S3Client),
+		disabledTools:   make(map[ToolName]bool),
+		middleware:      NewMiddlewareChain(),
+		toolMiddlewares: make(map[ToolName][]ToolMiddleware),
+		interceptors:    NewInterceptorChain(),
+		transformers:    NewTransformerChain(),
+		registeredTools: make(map[ToolName]bool),
+		maxGetSize:      DefaultMaxGetSize,
+		maxPutSize:      DefaultMaxPutSize,
+		readOnly:        false,
+		logger:          defaultLogger(),
 	}
 
 	// Apply options
@@ -75,36 +94,62 @@ func NewToolkit(client S3Client, opts ...Option) *Toolkit {
 	return t
 }
 
-// RegisterTools registers all S3 tools with the MCP server.
-func (t *Toolkit) RegisterTools(s *server.MCPServer) {
-	// Register each tool if not disabled
-	if !t.isToolDisabled(ToolListBuckets) {
-		t.registerListBuckets(s)
+// RegisterAll adds all S3 tools to the given MCP server.
+func (t *Toolkit) RegisterAll(server *mcp.Server) {
+	t.Register(server, AllTools()...)
+}
+
+// Register adds specific tools by name to the MCP server.
+func (t *Toolkit) Register(server *mcp.Server, names ...ToolName) {
+	for _, name := range names {
+		t.registerTool(server, name, nil)
 	}
-	if !t.isToolDisabled(ToolListObjects) {
-		t.registerListObjects(s)
+}
+
+// RegisterWith adds a tool with per-registration options.
+func (t *Toolkit) RegisterWith(server *mcp.Server, name ToolName, opts ...ToolOption) {
+	cfg := &toolConfig{}
+	for _, opt := range opts {
+		opt(cfg)
 	}
-	if !t.isToolDisabled(ToolGetObject) {
-		t.registerGetObject(s)
+	t.registerTool(server, name, cfg)
+}
+
+// registerTool dispatches to the appropriate tool registration method.
+func (t *Toolkit) registerTool(server *mcp.Server, name ToolName, cfg *toolConfig) {
+	if t.registeredTools[name] || t.isToolDisabled(name) {
+		return
 	}
-	if !t.isToolDisabled(ToolGetObjectMetadata) {
-		t.registerGetObjectMetadata(s)
+	t.dispatchToolRegistration(server, name, cfg)
+	t.registeredTools[name] = true
+}
+
+func (t *Toolkit) dispatchToolRegistration(server *mcp.Server, name ToolName, cfg *toolConfig) {
+	switch name {
+	case ToolListBuckets:
+		t.registerListBucketsTool(server, cfg)
+	case ToolListObjects:
+		t.registerListObjectsTool(server, cfg)
+	case ToolGetObject:
+		t.registerGetObjectTool(server, cfg)
+	case ToolGetObjectMetadata:
+		t.registerGetObjectMetadataTool(server, cfg)
+	case ToolPutObject:
+		t.registerPutObjectTool(server, cfg)
+	case ToolDeleteObject:
+		t.registerDeleteObjectTool(server, cfg)
+	case ToolCopyObject:
+		t.registerCopyObjectTool(server, cfg)
+	case ToolPresignURL:
+		t.registerPresignURLTool(server, cfg)
+	case ToolListConnections:
+		t.registerListConnectionsTool(server, cfg)
 	}
-	if !t.isToolDisabled(ToolPutObject) {
-		t.registerPutObject(s)
-	}
-	if !t.isToolDisabled(ToolDeleteObject) {
-		t.registerDeleteObject(s)
-	}
-	if !t.isToolDisabled(ToolCopyObject) {
-		t.registerCopyObject(s)
-	}
-	if !t.isToolDisabled(ToolPresignURL) {
-		t.registerPresignURL(s)
-	}
-	if !t.isToolDisabled(ToolListConnections) {
-		t.registerListConnections(s)
-	}
+}
+
+// RegisterTools registers all S3 tools with the MCP server (backward compatibility).
+func (t *Toolkit) RegisterTools(s *mcp.Server) {
+	t.RegisterAll(s)
 }
 
 // AddClient adds an S3 client with the given name to the toolkit.
@@ -201,69 +246,109 @@ func (t *Toolkit) MaxPutSize() int64 {
 }
 
 // toolName returns the full tool name with any configured prefix.
-func (t *Toolkit) toolName(name string) string {
+func (t *Toolkit) toolName(name ToolName) string {
 	if t.toolPrefix != "" {
-		return t.toolPrefix + name
+		return t.toolPrefix + string(name)
 	}
-	return name
+	return string(name)
 }
 
 // isToolDisabled returns true if the given tool is disabled.
-func (t *Toolkit) isToolDisabled(name string) bool {
+func (t *Toolkit) isToolDisabled(name ToolName) bool {
 	return t.disabledTools[name]
 }
 
 // wrapHandler wraps a tool handler with middleware, interceptors, and transformers.
-func (t *Toolkit) wrapHandler(toolName string, handler ToolHandler) ToolHandler {
-	// Create the full processing chain
-	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		// Create tool context
-		args, _ := request.Params.Arguments.(map[string]any)
-		connectionName := t.defaultConnection
-		if args != nil {
-			connectionName = OptionalString(args, "connection", t.defaultConnection)
-		}
-		tc := NewToolContext(toolName, connectionName)
+func (t *Toolkit) wrapHandler(
+	toolName ToolName,
+	handler func(context.Context, *mcp.CallToolRequest, any) (*mcp.CallToolResult, any, error),
+	cfg *toolConfig,
+) func(context.Context, *mcp.CallToolRequest, any) (*mcp.CallToolResult, any, error) {
+	allMiddlewares := t.collectMiddlewares(toolName, cfg)
+
+	// Zero-overhead optimization: if no middleware/interceptors/transformers, return handler unchanged
+	if len(allMiddlewares) == 0 && len(t.interceptors.All()) == 0 && len(t.transformers.All()) == 0 {
+		return handler
+	}
+
+	return func(ctx context.Context, req *mcp.CallToolRequest, input any) (*mcp.CallToolResult, any, error) {
+		tc := t.createToolContext(toolName)
 		ctx = WithToolContext(ctx, tc)
 
-		// Run interceptors
-		interceptResult := t.interceptors.Intercept(ctx, tc, request)
-		if !interceptResult.Allow {
-			t.logger.Warn("request blocked by interceptor",
-				"tool", toolName,
-				"reason", interceptResult.Reason)
-			return ErrorResultf("access denied: %s", interceptResult.Reason), nil
+		req, blocked := t.runInterceptors(ctx, tc, req, toolName)
+		if blocked != nil {
+			return blocked, nil, nil
 		}
 
-		// Apply any request modifications
-		if interceptResult.ModifiedRequest != nil {
-			request = *interceptResult.ModifiedRequest
-		}
-
-		// Apply middleware and execute handler
-		wrappedHandler := t.middleware.Apply(handler)
-		result, err := wrappedHandler(ctx, request)
+		ctx, err := t.runBeforeHooks(ctx, tc, allMiddlewares)
 		if err != nil {
-			return nil, err
+			return ErrorResult(err.Error()), nil, nil
 		}
 
-		// Apply transformers
-		result, err = t.transformers.Transform(ctx, tc, result)
+		result, extra, handlerErr := handler(ctx, req, input)
+		result = t.runAfterHooks(ctx, tc, result, handlerErr, allMiddlewares)
+		result, err = t.applyTransformers(ctx, tc, result)
 		if err != nil {
-			return nil, fmt.Errorf("transformer error: %w", err)
+			return ErrorResultf("transformer error: %v", err), nil, nil
 		}
 
-		return result, nil
+		return result, extra, nil
 	}
 }
 
-// registerTool is a helper to register a tool with the server.
-func (t *Toolkit) registerTool(s *server.MCPServer, tool mcp.Tool, handler ToolHandler) {
-	wrappedHandler := t.wrapHandler(tool.Name, handler)
+func (t *Toolkit) collectMiddlewares(toolName ToolName, cfg *toolConfig) []ToolMiddleware {
+	var all []ToolMiddleware
+	all = append(all, t.middleware.All()...)
+	if perTool, ok := t.toolMiddlewares[toolName]; ok {
+		all = append(all, perTool...)
+	}
+	if cfg != nil {
+		all = append(all, cfg.middlewares...)
+	}
+	return all
+}
 
-	s.AddTool(tool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return wrappedHandler(ctx, request)
-	})
+func (t *Toolkit) createToolContext(toolName ToolName) *ToolContext {
+	tc := NewToolContext(toolName, t.defaultConnection)
+	tc.StartTime = time.Now()
+	return tc
+}
+
+func (t *Toolkit) runInterceptors(ctx context.Context, tc *ToolContext, req *mcp.CallToolRequest, toolName ToolName) (*mcp.CallToolRequest, *mcp.CallToolResult) {
+	interceptResult := t.interceptors.Intercept(ctx, tc, req)
+	if !interceptResult.Allow {
+		t.logger.Warn("request blocked by interceptor", "tool", toolName, "reason", interceptResult.Reason)
+		return nil, ErrorResultf("access denied: %s", interceptResult.Reason)
+	}
+	if interceptResult.ModifiedRequest != nil {
+		return interceptResult.ModifiedRequest, nil
+	}
+	return req, nil
+}
+
+func (t *Toolkit) runBeforeHooks(ctx context.Context, tc *ToolContext, middlewares []ToolMiddleware) (context.Context, error) {
+	var err error
+	for _, m := range middlewares {
+		ctx, err = m.Before(ctx, tc)
+		if err != nil {
+			return ctx, err
+		}
+	}
+	return ctx, nil
+}
+
+func (t *Toolkit) runAfterHooks(ctx context.Context, tc *ToolContext, result *mcp.CallToolResult, handlerErr error, middlewares []ToolMiddleware) *mcp.CallToolResult {
+	for i := len(middlewares) - 1; i >= 0; i-- {
+		result, _ = middlewares[i].After(ctx, tc, result, handlerErr)
+	}
+	return result
+}
+
+func (t *Toolkit) applyTransformers(ctx context.Context, tc *ToolContext, result *mcp.CallToolResult) (*mcp.CallToolResult, error) {
+	if result == nil {
+		return nil, nil
+	}
+	return t.transformers.Transform(ctx, tc, result)
 }
 
 // Close closes all S3 clients managed by the toolkit.

@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"sync"
+	"time"
 )
 
 // contextKey is a type for context keys used by this package.
@@ -17,7 +18,7 @@ const (
 // It allows middleware, interceptors, and tools to share data during a request.
 type ToolContext struct {
 	// ToolName is the name of the tool being executed.
-	ToolName string
+	ToolName ToolName
 
 	// ConnectionName is the name of the S3 connection being used.
 	ConnectionName string
@@ -25,18 +26,27 @@ type ToolContext struct {
 	// RequestID is a unique identifier for this request.
 	RequestID string
 
+	// StartTime is when the tool execution started.
+	StartTime time.Time
+
 	// values stores arbitrary key-value pairs for middleware communication.
 	values map[string]any
 	mu     sync.RWMutex
 }
 
 // NewToolContext creates a new ToolContext with the given tool and connection names.
-func NewToolContext(toolName, connectionName string) *ToolContext {
+func NewToolContext(toolName ToolName, connectionName string) *ToolContext {
 	return &ToolContext{
 		ToolName:       toolName,
 		ConnectionName: connectionName,
+		StartTime:      time.Now(),
 		values:         make(map[string]any),
 	}
+}
+
+// Duration returns the time elapsed since the tool started executing.
+func (tc *ToolContext) Duration() time.Duration {
+	return time.Since(tc.StartTime)
 }
 
 // Set stores a value in the context with the given key.

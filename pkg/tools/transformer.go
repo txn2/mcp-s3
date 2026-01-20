@@ -3,7 +3,7 @@ package tools
 import (
 	"context"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // ResultTransformer allows modification of tool results after execution.

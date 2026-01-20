@@ -121,6 +121,45 @@ func TestToolContext_Clone(t *testing.T) {
 	}
 }
 
+func TestToolContext_GetBool(t *testing.T) {
+	tc := NewToolContext("test-tool", "test-conn")
+
+	t.Run("returns true for true value", func(t *testing.T) {
+		tc.Set("enabled", true)
+		if got := tc.GetBool("enabled"); !got {
+			t.Error("GetBool() = false, want true")
+		}
+	})
+
+	t.Run("returns false for false value", func(t *testing.T) {
+		tc.Set("disabled", false)
+		if got := tc.GetBool("disabled"); got {
+			t.Error("GetBool() = true, want false")
+		}
+	})
+
+	t.Run("returns false for non-bool", func(t *testing.T) {
+		tc.Set("str-key", "not a bool")
+		if got := tc.GetBool("str-key"); got {
+			t.Error("GetBool() = true, want false for non-bool")
+		}
+	})
+
+	t.Run("returns false for missing key", func(t *testing.T) {
+		if got := tc.GetBool("missing-key"); got {
+			t.Error("GetBool() = true, want false for missing key")
+		}
+	})
+}
+
+func TestToolContext_Duration(t *testing.T) {
+	tc := NewToolContext("test-tool", "test-conn")
+	// Duration should be non-negative
+	if tc.Duration() < 0 {
+		t.Error("Duration() should be non-negative")
+	}
+}
+
 func TestWithToolContext_GetToolContext(t *testing.T) {
 	t.Run("stores and retrieves ToolContext", func(t *testing.T) {
 		tc := NewToolContext("my-tool", "my-conn")

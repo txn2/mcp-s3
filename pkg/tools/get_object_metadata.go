@@ -3,8 +3,7 @@ package tools
 import (
 	"context"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // GetObjectMetadataResult represents the result of getting object metadata.
@@ -19,71 +18,52 @@ type GetObjectMetadataResult struct {
 	Metadata      map[string]string `json:"metadata,omitempty"`
 }
 
-// registerGetObjectMetadata registers the s3_get_object_metadata tool.
-func (t *Toolkit) registerGetObjectMetadata(s *server.MCPServer) {
-	tool := mcp.Tool{
-		Name:        t.toolName(ToolGetObjectMetadata),
-		Description: "Get metadata for an S3 object without downloading its content. Returns size, content type, last modified date, ETag, and custom metadata.",
-		InputSchema: mcp.ToolInputSchema{
-			Type:     "object",
-			Required: []string{"bucket", "key"},
-			Properties: map[string]any{
-				"bucket": map[string]any{
-					"type":        "string",
-					"description": "Name of the S3 bucket containing the object.",
-				},
-				"key": map[string]any{
-					"type":        "string",
-					"description": "Key (path) of the object to get metadata for.",
-				},
-				"connection": map[string]any{
-					"type":        "string",
-					"description": "Name of the S3 connection to use. If not specified, uses the default connection.",
-				},
-			},
-		},
+// registerGetObjectMetadataTool registers the s3_get_object_metadata tool.
+func (t *Toolkit) registerGetObjectMetadataTool(server *mcp.Server, cfg *toolConfig) {
+	baseHandler := func(ctx context.Context, req *mcp.CallToolRequest, input any) (*mcp.CallToolResult, any, error) {
+		metaInput, ok := input.(GetObjectMetadataInput)
+		if !ok {
+			return ErrorResult("internal error: invalid input type"), nil, nil
+		}
+		return t.handleGetObjectMetadata(ctx, req, metaInput)
 	}
 
-	t.registerTool(s, tool, t.handleGetObjectMetadata)
+	wrappedHandler := t.wrapHandler(ToolGetObjectMetadata, baseHandler, cfg)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        t.toolName(ToolGetObjectMetadata),
+		Description: "Get metadata for an S3 object without downloading its content. Returns size, content type, last modified date, ETag, and custom metadata.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetObjectMetadataInput) (*mcp.CallToolResult, any, error) {
+		return wrappedHandler(ctx, req, input)
+	})
 }
 
 // handleGetObjectMetadata handles the s3_get_object_metadata tool request.
-func (t *Toolkit) handleGetObjectMetadata(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	// Extract arguments
-	args, err := GetArgs(request)
-	if err != nil {
-		return ErrorResult(err), nil
+func (t *Toolkit) handleGetObjectMetadata(ctx context.Context, _ *mcp.CallToolRequest, input GetObjectMetadataInput) (*mcp.CallToolResult, any, error) {
+	// Validate required parameters
+	if input.Bucket == "" {
+		return ErrorResult("bucket parameter is required"), nil, nil
 	}
-
-	// Extract parameters
-	bucket, err := RequireString(args, "bucket")
-	if err != nil {
-		return ErrorResult(err), nil
+	if input.Key == "" {
+		return ErrorResult("key parameter is required"), nil, nil
 	}
-
-	key, err := RequireString(args, "key")
-	if err != nil {
-		return ErrorResult(err), nil
-	}
-
-	connectionName := OptionalString(args, "connection", "")
 
 	// Get client
-	client, err := t.GetClient(connectionName)
+	client, err := t.GetClient(input.Connection)
 	if err != nil {
-		return ErrorResult(err), nil
+		return ErrorResult(err.Error()), nil, nil
 	}
 
 	// Get metadata
-	meta, err := client.GetObjectMetadata(ctx, bucket, key)
+	meta, err := client.GetObjectMetadata(ctx, input.Bucket, input.Key)
 	if err != nil {
-		return ErrorResultf("failed to get object metadata: %v", err), nil
+		return ErrorResultf("failed to get object metadata: %v", err), nil, nil
 	}
 
 	// Build result
 	result := GetObjectMetadataResult{
-		Bucket:        bucket,
-		Key:           key,
+		Bucket:        input.Bucket,
+		Key:           input.Key,
 		Size:          meta.Size,
 		ContentType:   meta.ContentType,
 		ContentLength: meta.ContentLength,
@@ -95,5 +75,9 @@ func (t *Toolkit) handleGetObjectMetadata(ctx context.Context, request mcp.CallT
 		result.LastModified = meta.LastModified.Format("2006-01-02T15:04:05Z")
 	}
 
-	return JSONResult(result)
+	jsonResult, err := JSONResult(result)
+	if err != nil {
+		return ErrorResultf("failed to format result: %v", err), nil, nil
+	}
+	return jsonResult, nil, nil
 }

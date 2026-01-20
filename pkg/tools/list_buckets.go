@@ -3,8 +3,7 @@ package tools
 import (
 	"context"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // ListBucketsResult represents the result of listing buckets.
@@ -19,46 +18,38 @@ type BucketResult struct {
 	CreationDate string `json:"creation_date,omitempty"`
 }
 
-// registerListBuckets registers the s3_list_buckets tool.
-func (t *Toolkit) registerListBuckets(s *server.MCPServer) {
-	tool := mcp.Tool{
-		Name:        t.toolName(ToolListBuckets),
-		Description: "List all accessible S3 buckets. Returns bucket names and creation dates.",
-		InputSchema: mcp.ToolInputSchema{
-			Type: "object",
-			Properties: map[string]any{
-				"connection": map[string]any{
-					"type":        "string",
-					"description": "Name of the S3 connection to use. If not specified, uses the default connection.",
-				},
-			},
-		},
+// registerListBucketsTool registers the s3_list_buckets tool.
+func (t *Toolkit) registerListBucketsTool(server *mcp.Server, cfg *toolConfig) {
+	baseHandler := func(ctx context.Context, req *mcp.CallToolRequest, input any) (*mcp.CallToolResult, any, error) {
+		listInput, ok := input.(ListBucketsInput)
+		if !ok {
+			return ErrorResult("internal error: invalid input type"), nil, nil
+		}
+		return t.handleListBuckets(ctx, req, listInput)
 	}
 
-	t.registerTool(s, tool, t.handleListBuckets)
+	wrappedHandler := t.wrapHandler(ToolListBuckets, baseHandler, cfg)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        t.toolName(ToolListBuckets),
+		Description: "List all accessible S3 buckets. Returns bucket names and creation dates.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input ListBucketsInput) (*mcp.CallToolResult, any, error) {
+		return wrappedHandler(ctx, req, input)
+	})
 }
 
 // handleListBuckets handles the s3_list_buckets tool request.
-func (t *Toolkit) handleListBuckets(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	// Extract arguments
-	args, err := GetArgs(request)
-	if err != nil {
-		return ErrorResult(err), nil
-	}
-
-	// Get connection name
-	connectionName := OptionalString(args, "connection", "")
-
+func (t *Toolkit) handleListBuckets(ctx context.Context, _ *mcp.CallToolRequest, input ListBucketsInput) (*mcp.CallToolResult, any, error) {
 	// Get client
-	client, err := t.GetClient(connectionName)
+	client, err := t.GetClient(input.Connection)
 	if err != nil {
-		return ErrorResult(err), nil
+		return ErrorResult(err.Error()), nil, nil
 	}
 
 	// List buckets
 	buckets, err := client.ListBuckets(ctx)
 	if err != nil {
-		return ErrorResultf("failed to list buckets: %v", err), nil
+		return ErrorResultf("failed to list buckets: %v", err), nil, nil
 	}
 
 	// Build result
@@ -77,5 +68,9 @@ func (t *Toolkit) handleListBuckets(ctx context.Context, request mcp.CallToolReq
 		result.Buckets = append(result.Buckets, br)
 	}
 
-	return JSONResult(result)
+	jsonResult, err := JSONResult(result)
+	if err != nil {
+		return ErrorResultf("failed to format result: %v", err), nil, nil
+	}
+	return jsonResult, nil, nil
 }

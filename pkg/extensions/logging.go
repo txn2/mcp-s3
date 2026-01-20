@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/txn2/mcp-s3/pkg/tools"
 )
@@ -27,62 +27,54 @@ func (m *LoggingMiddleware) Name() string {
 	return "logging"
 }
 
-// Wrap wraps the handler with logging.
-func (m *LoggingMiddleware) Wrap(next tools.ToolHandler) tools.ToolHandler {
-	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		tc := tools.GetToolContext(ctx)
-
-		// Build log attributes
-		attrs := []any{
-			"tool", request.Params.Name,
-		}
-
-		if tc != nil {
-			if tc.ConnectionName != "" {
-				attrs = append(attrs, "connection", tc.ConnectionName)
-			}
-			if tc.RequestID != "" {
-				attrs = append(attrs, "request_id", tc.RequestID)
-			}
-		}
-
-		// Add relevant arguments (excluding sensitive data)
-		if args, ok := request.Params.Arguments.(map[string]any); ok {
-			if bucket, ok := args["bucket"].(string); ok {
-				attrs = append(attrs, "bucket", bucket)
-			}
-			if key, ok := args["key"].(string); ok {
-				attrs = append(attrs, "key", key)
-			}
-			if prefix, ok := args["prefix"].(string); ok {
-				attrs = append(attrs, "prefix", prefix)
-			}
-		}
-
-		// Log request start
-		m.logger.Info("tool request started", attrs...)
-
-		// Track timing
-		start := time.Now()
-
-		// Execute handler
-		result, err := next(ctx, request)
-
-		// Calculate duration
-		duration := time.Since(start)
-		attrs = append(attrs, "duration_ms", duration.Milliseconds())
-
-		// Log result
-		if err != nil {
-			m.logger.Error("tool request failed", append(attrs, "error", err.Error())...)
-		} else if result.IsError {
-			m.logger.Warn("tool request returned error", attrs...)
-		} else {
-			m.logger.Info("tool request completed", attrs...)
-		}
-
-		return result, err
+// Before logs the start of a tool request.
+func (m *LoggingMiddleware) Before(ctx context.Context, tc *tools.ToolContext) (context.Context, error) {
+	// Build log attributes
+	attrs := []any{
+		"tool", tc.ToolName,
 	}
+
+	if tc.ConnectionName != "" {
+		attrs = append(attrs, "connection", tc.ConnectionName)
+	}
+	if tc.RequestID != "" {
+		attrs = append(attrs, "request_id", tc.RequestID)
+	}
+
+	// Log request start
+	m.logger.Info("tool request started", attrs...)
+
+	return ctx, nil
+}
+
+// After logs the completion of a tool request.
+func (m *LoggingMiddleware) After(ctx context.Context, tc *tools.ToolContext, result *mcp.CallToolResult, handlerErr error) (*mcp.CallToolResult, error) {
+	// Build log attributes
+	attrs := []any{
+		"tool", tc.ToolName,
+	}
+
+	if tc.ConnectionName != "" {
+		attrs = append(attrs, "connection", tc.ConnectionName)
+	}
+	if tc.RequestID != "" {
+		attrs = append(attrs, "request_id", tc.RequestID)
+	}
+
+	// Calculate duration
+	duration := time.Since(tc.StartTime)
+	attrs = append(attrs, "duration_ms", duration.Milliseconds())
+
+	// Log result
+	if handlerErr != nil {
+		m.logger.Error("tool request failed", append(attrs, "error", handlerErr.Error())...)
+	} else if result != nil && result.IsError {
+		m.logger.Warn("tool request returned error", attrs...)
+	} else {
+		m.logger.Info("tool request completed", attrs...)
+	}
+
+	return result, handlerErr
 }
 
 // Ensure LoggingMiddleware implements ToolMiddleware.

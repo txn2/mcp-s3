@@ -3,9 +3,10 @@ package extensions
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/txn2/mcp-s3/pkg/tools"
 )
@@ -31,7 +32,7 @@ func (i *SizeLimitInterceptor) Name() string {
 
 // Intercept checks size limits for PUT operations.
 // GET size limits are handled in the tool itself since we need to check the object size.
-func (i *SizeLimitInterceptor) Intercept(ctx context.Context, tc *tools.ToolContext, request mcp.CallToolRequest) tools.InterceptResult {
+func (i *SizeLimitInterceptor) Intercept(ctx context.Context, tc *tools.ToolContext, request *mcp.CallToolRequest) tools.InterceptResult {
 	// Only check PUT operations for content size
 	if tc.ToolName != tools.ToolPutObject {
 		// Store the limits in context for tools to use
@@ -45,8 +46,9 @@ func (i *SizeLimitInterceptor) Intercept(ctx context.Context, tc *tools.ToolCont
 		return tools.Allowed()
 	}
 
-	args, ok := request.Params.Arguments.(map[string]any)
-	if !ok {
+	// Extract arguments from request - the request has Params.Arguments as raw JSON
+	args, err := extractArgsFromRequest(request)
+	if err != nil || args == nil {
 		return tools.Allowed()
 	}
 
@@ -55,7 +57,10 @@ func (i *SizeLimitInterceptor) Intercept(ctx context.Context, tc *tools.ToolCont
 		return tools.Allowed()
 	}
 
-	isBase64 := tools.OptionalBool(args, "is_base64", false)
+	isBase64 := false
+	if b, ok := args["is_base64"].(bool); ok {
+		isBase64 = b
+	}
 
 	var size int64
 	if isBase64 {
@@ -74,6 +79,20 @@ func (i *SizeLimitInterceptor) Intercept(ctx context.Context, tc *tools.ToolCont
 	}
 
 	return tools.Allowed()
+}
+
+// extractArgsFromRequest extracts arguments from an MCP request.
+func extractArgsFromRequest(request *mcp.CallToolRequest) (map[string]any, error) {
+	if request == nil || len(request.Params.Arguments) == 0 {
+		return nil, nil
+	}
+
+	// Arguments in the official SDK is json.RawMessage
+	var args map[string]any
+	if err := json.Unmarshal(request.Params.Arguments, &args); err != nil {
+		return nil, err
+	}
+	return args, nil
 }
 
 // Ensure SizeLimitInterceptor implements RequestInterceptor.

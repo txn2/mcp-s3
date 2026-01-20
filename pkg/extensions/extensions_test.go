@@ -3,13 +3,14 @@ package extensions
 import (
 	"bytes"
 	"context"
-	"errors"
+	"encoding/json"
 	"log/slog"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/txn2/mcp-s3/pkg/tools"
 )
@@ -80,25 +81,36 @@ func TestParseSize(t *testing.T) {
 	}
 }
 
+func makeCallToolRequest(args map[string]any) *mcp.CallToolRequest {
+	req := &mcp.CallToolRequest{
+		Params: &mcp.CallToolParamsRaw{},
+	}
+	if args != nil {
+		argsJSON, _ := json.Marshal(args)
+		req.Params.Arguments = argsJSON
+	}
+	return req
+}
+
 func TestReadOnlyInterceptor(t *testing.T) {
 	t.Run("enabled blocks write tools", func(t *testing.T) {
 		interceptor := NewReadOnlyInterceptor(true)
 		tc := tools.NewToolContext(tools.ToolPutObject, "")
-		result := interceptor.Intercept(context.Background(), tc, mcp.CallToolRequest{})
+		result := interceptor.Intercept(context.Background(), tc, makeCallToolRequest(nil))
 		assertBool(t, "Allow", false, result.Allow)
 	})
 
 	t.Run("enabled allows read tools", func(t *testing.T) {
 		interceptor := NewReadOnlyInterceptor(true)
 		tc := tools.NewToolContext(tools.ToolListBuckets, "")
-		result := interceptor.Intercept(context.Background(), tc, mcp.CallToolRequest{})
+		result := interceptor.Intercept(context.Background(), tc, makeCallToolRequest(nil))
 		assertBool(t, "Allow", true, result.Allow)
 	})
 
 	t.Run("disabled allows all tools", func(t *testing.T) {
 		interceptor := NewReadOnlyInterceptor(false)
 		tc := tools.NewToolContext(tools.ToolPutObject, "")
-		result := interceptor.Intercept(context.Background(), tc, mcp.CallToolRequest{})
+		result := interceptor.Intercept(context.Background(), tc, makeCallToolRequest(nil))
 		assertBool(t, "Allow", true, result.Allow)
 	})
 }
@@ -107,8 +119,7 @@ func TestSizeLimitInterceptor(t *testing.T) {
 	t.Run("allows small content", func(t *testing.T) {
 		interceptor := NewSizeLimitInterceptor(10*1024*1024, 1024)
 		tc := tools.NewToolContext(tools.ToolPutObject, "")
-		req := mcp.CallToolRequest{}
-		req.Params.Arguments = map[string]any{"content": "small content"}
+		req := makeCallToolRequest(map[string]any{"content": "small content"})
 		result := interceptor.Intercept(context.Background(), tc, req)
 		assertBool(t, "Allow", true, result.Allow)
 	})
@@ -116,8 +127,7 @@ func TestSizeLimitInterceptor(t *testing.T) {
 	t.Run("blocks large content", func(t *testing.T) {
 		interceptor := NewSizeLimitInterceptor(10*1024*1024, 10)
 		tc := tools.NewToolContext(tools.ToolPutObject, "")
-		req := mcp.CallToolRequest{}
-		req.Params.Arguments = map[string]any{"content": "this content is way too long"}
+		req := makeCallToolRequest(map[string]any{"content": "this content is way too long"})
 		result := interceptor.Intercept(context.Background(), tc, req)
 		assertBool(t, "Allow", false, result.Allow)
 	})
@@ -127,8 +137,7 @@ func TestPrefixACLInterceptor(t *testing.T) {
 	t.Run("denies blocked prefix", func(t *testing.T) {
 		interceptor := NewPrefixACLInterceptor(nil, []string{"private/", "secret/"})
 		tc := tools.NewToolContext(tools.ToolGetObject, "")
-		req := mcp.CallToolRequest{}
-		req.Params.Arguments = map[string]any{"key": "private/file.txt"}
+		req := makeCallToolRequest(map[string]any{"key": "private/file.txt"})
 		result := interceptor.Intercept(context.Background(), tc, req)
 		assertBool(t, "Allow", false, result.Allow)
 	})
@@ -136,8 +145,7 @@ func TestPrefixACLInterceptor(t *testing.T) {
 	t.Run("allows non-blocked prefix", func(t *testing.T) {
 		interceptor := NewPrefixACLInterceptor(nil, []string{"private/", "secret/"})
 		tc := tools.NewToolContext(tools.ToolGetObject, "")
-		req := mcp.CallToolRequest{}
-		req.Params.Arguments = map[string]any{"key": "public/file.txt"}
+		req := makeCallToolRequest(map[string]any{"key": "public/file.txt"})
 		result := interceptor.Intercept(context.Background(), tc, req)
 		assertBool(t, "Allow", true, result.Allow)
 	})
@@ -145,8 +153,7 @@ func TestPrefixACLInterceptor(t *testing.T) {
 	t.Run("requires allowed prefix when specified", func(t *testing.T) {
 		interceptor := NewPrefixACLInterceptor([]string{"allowed/"}, nil)
 		tc := tools.NewToolContext(tools.ToolGetObject, "")
-		req := mcp.CallToolRequest{}
-		req.Params.Arguments = map[string]any{"key": "not-allowed/file.txt"}
+		req := makeCallToolRequest(map[string]any{"key": "not-allowed/file.txt"})
 		result := interceptor.Intercept(context.Background(), tc, req)
 		assertBool(t, "Allow", false, result.Allow)
 	})
@@ -272,20 +279,15 @@ func TestAuditMiddleware(t *testing.T) {
 		}
 	})
 
-	t.Run("wrap logs successful call", func(t *testing.T) {
+	t.Run("After logs successful call", func(t *testing.T) {
 		logger := NewBufferedAuditLogger()
 		mw := NewAuditMiddleware(logger)
 
-		handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return tools.TextResult("success"), nil
-		}
+		tc := tools.NewToolContext(tools.ToolListBuckets, "")
+		tc.StartTime = time.Now().Add(-100 * time.Millisecond) // Simulate elapsed time
 
-		wrapped := mw.Wrap(handler)
-		req := mcp.CallToolRequest{}
-		req.Params.Name = "test_tool"
-		req.Params.Arguments = map[string]any{"bucket": "test-bucket"}
-
-		_, err := wrapped(context.Background(), req)
+		result := tools.TextResult("success")
+		_, err := mw.After(context.Background(), tc, result, nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -297,24 +299,19 @@ func TestAuditMiddleware(t *testing.T) {
 		if !entries[0].Success {
 			t.Error("expected success=true")
 		}
-		if entries[0].Tool != "test_tool" {
-			t.Errorf("Tool = %q, want %q", entries[0].Tool, "test_tool")
+		if entries[0].Tool != "s3_list_buckets" {
+			t.Errorf("Tool = %q, want %q", entries[0].Tool, "s3_list_buckets")
 		}
 	})
 
-	t.Run("wrap logs error call", func(t *testing.T) {
+	t.Run("After logs error call", func(t *testing.T) {
 		logger := NewBufferedAuditLogger()
 		mw := NewAuditMiddleware(logger)
 
-		handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return nil, errors.New("test error")
-		}
+		tc := tools.NewToolContext(tools.ToolListBuckets, "")
+		tc.StartTime = time.Now()
 
-		wrapped := mw.Wrap(handler)
-		req := mcp.CallToolRequest{}
-		req.Params.Name = "test_tool"
-
-		_, _ = wrapped(context.Background(), req)
+		_, _ = mw.After(context.Background(), tc, nil, context.DeadlineExceeded)
 
 		entries := logger.Entries()
 		if len(entries) != 1 {
@@ -323,24 +320,20 @@ func TestAuditMiddleware(t *testing.T) {
 		if entries[0].Success {
 			t.Error("expected success=false")
 		}
-		if entries[0].Error != "test error" {
-			t.Errorf("Error = %q, want %q", entries[0].Error, "test error")
+		if entries[0].Error != "context deadline exceeded" {
+			t.Errorf("Error = %q, want %q", entries[0].Error, "context deadline exceeded")
 		}
 	})
 
-	t.Run("wrap logs result with IsError", func(t *testing.T) {
+	t.Run("After logs result with IsError", func(t *testing.T) {
 		logger := NewBufferedAuditLogger()
 		mw := NewAuditMiddleware(logger)
 
-		handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return tools.ErrorResult(errors.New("result error")), nil
-		}
+		tc := tools.NewToolContext(tools.ToolListBuckets, "")
+		tc.StartTime = time.Now()
 
-		wrapped := mw.Wrap(handler)
-		req := mcp.CallToolRequest{}
-		req.Params.Name = "test_tool"
-
-		_, _ = wrapped(context.Background(), req)
+		result := tools.ErrorResult("result error")
+		_, _ = mw.After(context.Background(), tc, result, nil)
 
 		entries := logger.Entries()
 		if len(entries) != 1 {
@@ -351,23 +344,16 @@ func TestAuditMiddleware(t *testing.T) {
 		}
 	})
 
-	t.Run("wrap uses tool context", func(t *testing.T) {
+	t.Run("After uses tool context", func(t *testing.T) {
 		logger := NewBufferedAuditLogger()
 		mw := NewAuditMiddleware(logger)
 
-		handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return tools.TextResult("ok"), nil
-		}
-
-		wrapped := mw.Wrap(handler)
-		req := mcp.CallToolRequest{}
-		req.Params.Name = "test_tool"
-
-		tc := tools.NewToolContext("test_tool", "my-connection")
+		tc := tools.NewToolContext(tools.ToolListBuckets, "my-connection")
 		tc.RequestID = "req-123"
-		ctx := tools.WithToolContext(context.Background(), tc)
+		tc.StartTime = time.Now()
 
-		_, _ = wrapped(ctx, req)
+		result := tools.TextResult("ok")
+		_, _ = mw.After(context.Background(), tc, result, nil)
 
 		entries := logger.Entries()
 		if entries[0].Connection != "my-connection" {
@@ -375,71 +361,6 @@ func TestAuditMiddleware(t *testing.T) {
 		}
 		if entries[0].RequestID != "req-123" {
 			t.Errorf("RequestID = %q, want %q", entries[0].RequestID, "req-123")
-		}
-	})
-}
-
-func TestSanitizeArguments(t *testing.T) {
-	t.Run("nil args returns nil", func(t *testing.T) {
-		result := sanitizeArguments(nil)
-		if result != nil {
-			t.Error("expected nil")
-		}
-	})
-
-	t.Run("sanitizes content field", func(t *testing.T) {
-		args := map[string]any{
-			"content": "secret data here",
-			"bucket":  "my-bucket",
-		}
-		result := sanitizeArguments(args)
-
-		// content should be replaced with length
-		if result["content"] != 16 {
-			t.Errorf("content = %v, want 16", result["content"])
-		}
-		// bucket should be preserved
-		if result["bucket"] != "my-bucket" {
-			t.Errorf("bucket = %v, want my-bucket", result["bucket"])
-		}
-	})
-
-	t.Run("sanitizes metadata field", func(t *testing.T) {
-		args := map[string]any{
-			"metadata": map[string]any{
-				"key1": "value1",
-				"key2": "value2",
-			},
-		}
-		result := sanitizeArguments(args)
-
-		// metadata should be replaced with keys only
-		keys, ok := result["metadata"].([]string)
-		if !ok {
-			t.Fatalf("metadata should be []string, got %T", result["metadata"])
-		}
-		if len(keys) != 2 {
-			t.Errorf("expected 2 keys, got %d", len(keys))
-		}
-	})
-
-	t.Run("handles non-string content", func(t *testing.T) {
-		args := map[string]any{
-			"content": 12345,
-		}
-		result := sanitizeArguments(args)
-		if result["content"] != "[content]" {
-			t.Errorf("content = %v, want [content]", result["content"])
-		}
-	})
-
-	t.Run("handles non-map metadata", func(t *testing.T) {
-		args := map[string]any{
-			"metadata": "not a map",
-		}
-		result := sanitizeArguments(args)
-		if result["metadata"] != "[metadata]" {
-			t.Errorf("metadata = %v, want [metadata]", result["metadata"])
 		}
 	})
 }
@@ -494,49 +415,53 @@ func TestLoggingMiddleware(t *testing.T) {
 		}
 	})
 
-	t.Run("wrap logs successful call", func(t *testing.T) {
+	t.Run("Before logs start", func(t *testing.T) {
 		var buf bytes.Buffer
 		logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 		mw := NewLoggingMiddleware(logger)
 
-		handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return tools.TextResult("success"), nil
-		}
-
-		wrapped := mw.Wrap(handler)
-		req := mcp.CallToolRequest{}
-		req.Params.Name = "test_tool"
-		req.Params.Arguments = map[string]any{
-			"bucket": "test-bucket",
-			"key":    "test-key",
-			"prefix": "test-prefix",
-		}
-
-		_, err := wrapped(context.Background(), req)
+		tc := tools.NewToolContext(tools.ToolListBuckets, "")
+		_, err := mw.Before(context.Background(), tc)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
 		logOutput := buf.String()
-		if !strings.Contains(logOutput, "test_tool") {
+		if !strings.Contains(logOutput, "s3_list_buckets") {
 			t.Error("expected log to contain tool name")
 		}
 	})
 
-	t.Run("wrap logs error", func(t *testing.T) {
+	t.Run("After logs completion", func(t *testing.T) {
 		var buf bytes.Buffer
 		logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 		mw := NewLoggingMiddleware(logger)
 
-		handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return nil, errors.New("test error")
+		tc := tools.NewToolContext(tools.ToolListBuckets, "my-connection")
+		tc.RequestID = "req-456"
+		tc.StartTime = time.Now().Add(-100 * time.Millisecond)
+
+		result := tools.TextResult("success")
+		_, err := mw.After(context.Background(), tc, result, nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
 		}
 
-		wrapped := mw.Wrap(handler)
-		req := mcp.CallToolRequest{}
-		req.Params.Name = "test_tool"
+		logOutput := buf.String()
+		if !strings.Contains(logOutput, "s3_list_buckets") {
+			t.Error("expected log to contain tool name")
+		}
+	})
 
-		_, _ = wrapped(context.Background(), req)
+	t.Run("After logs error", func(t *testing.T) {
+		var buf bytes.Buffer
+		logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		mw := NewLoggingMiddleware(logger)
+
+		tc := tools.NewToolContext(tools.ToolListBuckets, "")
+		tc.StartTime = time.Now()
+
+		_, _ = mw.After(context.Background(), tc, nil, context.DeadlineExceeded)
 
 		logOutput := buf.String()
 		if !strings.Contains(logOutput, "error") {
@@ -544,49 +469,20 @@ func TestLoggingMiddleware(t *testing.T) {
 		}
 	})
 
-	t.Run("wrap logs result with IsError", func(t *testing.T) {
+	t.Run("After logs result with IsError", func(t *testing.T) {
 		var buf bytes.Buffer
 		logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 		mw := NewLoggingMiddleware(logger)
 
-		handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return tools.ErrorResult(errors.New("result error")), nil
-		}
+		tc := tools.NewToolContext(tools.ToolListBuckets, "")
+		tc.StartTime = time.Now()
 
-		wrapped := mw.Wrap(handler)
-		req := mcp.CallToolRequest{}
-		req.Params.Name = "test_tool"
-
-		_, _ = wrapped(context.Background(), req)
+		result := tools.ErrorResult("result error")
+		_, _ = mw.After(context.Background(), tc, result, nil)
 
 		logOutput := buf.String()
 		if !strings.Contains(logOutput, "WARN") {
 			t.Error("expected log to contain warning level")
-		}
-	})
-
-	t.Run("wrap uses tool context", func(t *testing.T) {
-		var buf bytes.Buffer
-		logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
-		mw := NewLoggingMiddleware(logger)
-
-		handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return tools.TextResult("ok"), nil
-		}
-
-		wrapped := mw.Wrap(handler)
-		req := mcp.CallToolRequest{}
-		req.Params.Name = "test_tool"
-
-		tc := tools.NewToolContext("test_tool", "my-connection")
-		tc.RequestID = "req-456"
-		ctx := tools.WithToolContext(context.Background(), tc)
-
-		_, _ = wrapped(ctx, req)
-
-		logOutput := buf.String()
-		if !strings.Contains(logOutput, "my-connection") {
-			t.Error("expected log to contain connection name")
 		}
 	})
 }
@@ -600,24 +496,20 @@ func TestMetricsMiddleware(t *testing.T) {
 		}
 	})
 
-	t.Run("wrap tracks successful call", func(t *testing.T) {
+	t.Run("After tracks successful call", func(t *testing.T) {
 		metrics := NewMetrics()
 		mw := NewMetricsMiddleware(metrics)
 
-		handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return tools.TextResult("success"), nil
-		}
+		tc := tools.NewToolContext(tools.ToolListBuckets, "")
+		tc.StartTime = time.Now().Add(-100 * time.Millisecond)
 
-		wrapped := mw.Wrap(handler)
-		req := mcp.CallToolRequest{}
-		req.Params.Name = "test_tool"
-
-		_, err := wrapped(context.Background(), req)
+		result := tools.TextResult("success")
+		_, err := mw.After(context.Background(), tc, result, nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		stats := metrics.GetToolStats("test_tool")
+		stats := metrics.GetToolStats("s3_list_buckets")
 		if stats.Calls != 1 {
 			t.Errorf("Calls = %d, want 1", stats.Calls)
 		}
@@ -626,41 +518,32 @@ func TestMetricsMiddleware(t *testing.T) {
 		}
 	})
 
-	t.Run("wrap tracks error call", func(t *testing.T) {
+	t.Run("After tracks error call", func(t *testing.T) {
 		metrics := NewMetrics()
 		mw := NewMetricsMiddleware(metrics)
 
-		handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return nil, errors.New("test error")
-		}
+		tc := tools.NewToolContext(tools.ToolGetObject, "")
+		tc.StartTime = time.Now()
 
-		wrapped := mw.Wrap(handler)
-		req := mcp.CallToolRequest{}
-		req.Params.Name = "failing_tool"
+		_, _ = mw.After(context.Background(), tc, nil, context.DeadlineExceeded)
 
-		_, _ = wrapped(context.Background(), req)
-
-		stats := metrics.GetToolStats("failing_tool")
+		stats := metrics.GetToolStats("s3_get_object")
 		if stats.Errors != 1 {
 			t.Errorf("Errors = %d, want 1", stats.Errors)
 		}
 	})
 
-	t.Run("wrap tracks result with IsError", func(t *testing.T) {
+	t.Run("After tracks result with IsError", func(t *testing.T) {
 		metrics := NewMetrics()
 		mw := NewMetricsMiddleware(metrics)
 
-		handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return tools.ErrorResult(errors.New("result error")), nil
-		}
+		tc := tools.NewToolContext(tools.ToolPutObject, "")
+		tc.StartTime = time.Now()
 
-		wrapped := mw.Wrap(handler)
-		req := mcp.CallToolRequest{}
-		req.Params.Name = "error_result_tool"
+		result := tools.ErrorResult("result error")
+		_, _ = mw.After(context.Background(), tc, result, nil)
 
-		_, _ = wrapped(context.Background(), req)
-
-		stats := metrics.GetToolStats("error_result_tool")
+		stats := metrics.GetToolStats("s3_put_object")
 		if stats.Errors != 1 {
 			t.Errorf("Errors = %d, want 1 for error result", stats.Errors)
 		}
@@ -671,8 +554,7 @@ func TestSizeLimitInterceptor_Intercept(t *testing.T) {
 	t.Run("allows get within limit", func(t *testing.T) {
 		interceptor := NewSizeLimitInterceptor(1024, 1024)
 		tc := tools.NewToolContext(tools.ToolGetObject, "")
-		req := mcp.CallToolRequest{}
-		req.Params.Arguments = map[string]any{"bucket": "b", "key": "k"}
+		req := makeCallToolRequest(map[string]any{"bucket": "b", "key": "k"})
 		result := interceptor.Intercept(context.Background(), tc, req)
 		assertBool(t, "Allow", true, result.Allow)
 	})
@@ -680,7 +562,7 @@ func TestSizeLimitInterceptor_Intercept(t *testing.T) {
 	t.Run("allows non-size-limited tools", func(t *testing.T) {
 		interceptor := NewSizeLimitInterceptor(1024, 1024)
 		tc := tools.NewToolContext(tools.ToolListBuckets, "")
-		req := mcp.CallToolRequest{}
+		req := makeCallToolRequest(nil)
 		result := interceptor.Intercept(context.Background(), tc, req)
 		assertBool(t, "Allow", true, result.Allow)
 	})
@@ -688,8 +570,7 @@ func TestSizeLimitInterceptor_Intercept(t *testing.T) {
 	t.Run("blocks large put content", func(t *testing.T) {
 		interceptor := NewSizeLimitInterceptor(1024, 10) // 10 byte put limit
 		tc := tools.NewToolContext(tools.ToolPutObject, "")
-		req := mcp.CallToolRequest{}
-		req.Params.Arguments = map[string]any{"content": "this is way more than 10 bytes of content"}
+		req := makeCallToolRequest(map[string]any{"content": "this is way more than 10 bytes of content"})
 		result := interceptor.Intercept(context.Background(), tc, req)
 		assertBool(t, "Allow", false, result.Allow)
 	})
@@ -699,8 +580,7 @@ func TestPrefixACLInterceptor_ExtractKey(t *testing.T) {
 	t.Run("extracts key from get object", func(t *testing.T) {
 		interceptor := NewPrefixACLInterceptor(nil, []string{"blocked/"})
 		tc := tools.NewToolContext(tools.ToolGetObject, "")
-		req := mcp.CallToolRequest{}
-		req.Params.Arguments = map[string]any{"key": "blocked/file.txt"}
+		req := makeCallToolRequest(map[string]any{"key": "blocked/file.txt"})
 		result := interceptor.Intercept(context.Background(), tc, req)
 		assertBool(t, "Allow", false, result.Allow)
 	})
@@ -708,18 +588,15 @@ func TestPrefixACLInterceptor_ExtractKey(t *testing.T) {
 	t.Run("extracts source_key from copy object", func(t *testing.T) {
 		interceptor := NewPrefixACLInterceptor(nil, []string{"blocked/"})
 		tc := tools.NewToolContext(tools.ToolCopyObject, "")
-		req := mcp.CallToolRequest{}
-		req.Params.Arguments = map[string]any{"source_key": "blocked/file.txt", "dest_key": "allowed/file.txt"}
+		req := makeCallToolRequest(map[string]any{"source_key": "blocked/file.txt", "dest_key": "allowed/file.txt"})
 		result := interceptor.Intercept(context.Background(), tc, req)
 		assertBool(t, "Allow", false, result.Allow)
 	})
 
 	t.Run("extracts dest_key from copy object when source is empty", func(t *testing.T) {
-		// Implementation prioritizes source_key; dest_key is only checked when source_key is empty
 		interceptor := NewPrefixACLInterceptor(nil, []string{"blocked/"})
 		tc := tools.NewToolContext(tools.ToolCopyObject, "")
-		req := mcp.CallToolRequest{}
-		req.Params.Arguments = map[string]any{"dest_key": "blocked/file.txt"}
+		req := makeCallToolRequest(map[string]any{"dest_key": "blocked/file.txt"})
 		result := interceptor.Intercept(context.Background(), tc, req)
 		assertBool(t, "Allow", false, result.Allow)
 	})
@@ -727,8 +604,7 @@ func TestPrefixACLInterceptor_ExtractKey(t *testing.T) {
 	t.Run("extracts prefix from list objects", func(t *testing.T) {
 		interceptor := NewPrefixACLInterceptor(nil, []string{"blocked/"})
 		tc := tools.NewToolContext(tools.ToolListObjects, "")
-		req := mcp.CallToolRequest{}
-		req.Params.Arguments = map[string]any{"prefix": "blocked/subdir/"}
+		req := makeCallToolRequest(map[string]any{"prefix": "blocked/subdir/"})
 		result := interceptor.Intercept(context.Background(), tc, req)
 		assertBool(t, "Allow", false, result.Allow)
 	})
@@ -736,7 +612,7 @@ func TestPrefixACLInterceptor_ExtractKey(t *testing.T) {
 	t.Run("allows when no prefix in request", func(t *testing.T) {
 		interceptor := NewPrefixACLInterceptor(nil, []string{"blocked/"})
 		tc := tools.NewToolContext(tools.ToolListBuckets, "")
-		req := mcp.CallToolRequest{}
+		req := makeCallToolRequest(nil)
 		result := interceptor.Intercept(context.Background(), tc, req)
 		assertBool(t, "Allow", true, result.Allow)
 	})
