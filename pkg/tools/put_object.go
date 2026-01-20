@@ -41,58 +41,69 @@ func (t *Toolkit) registerPutObjectTool(server *mcp.Server, cfg *toolConfig) {
 
 // handlePutObject handles the s3_put_object tool request.
 func (t *Toolkit) handlePutObject(ctx context.Context, _ *mcp.CallToolRequest, input PutObjectInput) (*mcp.CallToolResult, any, error) {
-	// Check read-only mode
-	if t.readOnly {
-		return ErrorResult(ErrReadOnly.Error()), nil, nil
+	if errResult := t.validatePutInput(input); errResult != nil {
+		return errResult, nil, nil
 	}
 
-	// Validate required parameters
-	if input.Bucket == "" {
-		return ErrorResult("bucket parameter is required"), nil, nil
-	}
-	if input.Key == "" {
-		return ErrorResult("key parameter is required"), nil, nil
-	}
-	if input.Content == "" {
-		return ErrorResult("content parameter is required"), nil, nil
+	body, errResult := t.preparePutBody(input)
+	if errResult != nil {
+		return errResult, nil, nil
 	}
 
-	// Decode content
-	body, err := decodeContent(input.Content, input.IsBase64)
-	if err != nil {
-		return ErrorResultf("failed to decode base64 content: %v", err), nil, nil
-	}
-
-	// Check size limit
-	if err := t.checkPutSizeLimit(body); err != nil {
-		return ErrorResult(err.Error()), nil, nil
-	}
-
-	// Get client
 	s3Client, err := t.GetClient(input.Connection)
 	if err != nil {
 		return ErrorResult(err.Error()), nil, nil
 	}
 
-	// Apply default content type
-	contentType := input.ContentType
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
-
-	// Put object
 	output, err := s3Client.PutObject(ctx, &client.PutObjectInput{
 		Bucket:      input.Bucket,
 		Key:         input.Key,
 		Body:        body,
-		ContentType: contentType,
+		ContentType: defaultContentType(input.ContentType),
 		Metadata:    input.Metadata,
 	})
 	if err != nil {
 		return ErrorResultf("failed to put object: %v", err), nil, nil
 	}
 
-	// Build result
+	return t.buildPutResult(input, body, output)
+}
+
+func (t *Toolkit) validatePutInput(input PutObjectInput) *mcp.CallToolResult {
+	if t.readOnly {
+		return ErrorResult(ErrReadOnly.Error())
+	}
+	if input.Bucket == "" {
+		return ErrorResult("bucket parameter is required")
+	}
+	if input.Key == "" {
+		return ErrorResult("key parameter is required")
+	}
+	if input.Content == "" {
+		return ErrorResult("content parameter is required")
+	}
+	return nil
+}
+
+func (t *Toolkit) preparePutBody(input PutObjectInput) ([]byte, *mcp.CallToolResult) {
+	body, err := decodeContent(input.Content, input.IsBase64)
+	if err != nil {
+		return nil, ErrorResultf("failed to decode base64 content: %v", err)
+	}
+	if err := t.checkPutSizeLimit(body); err != nil {
+		return nil, ErrorResult(err.Error())
+	}
+	return body, nil
+}
+
+func defaultContentType(contentType string) string {
+	if contentType == "" {
+		return "application/octet-stream"
+	}
+	return contentType
+}
+
+func (t *Toolkit) buildPutResult(input PutObjectInput, body []byte, output *client.PutObjectOutput) (*mcp.CallToolResult, any, error) {
 	result := PutObjectResult{
 		Bucket:    input.Bucket,
 		Key:       input.Key,
@@ -100,7 +111,6 @@ func (t *Toolkit) handlePutObject(ctx context.Context, _ *mcp.CallToolRequest, i
 		ETag:      output.ETag,
 		VersionID: output.VersionID,
 	}
-
 	jsonResult, err := JSONResult(result)
 	if err != nil {
 		return ErrorResultf("failed to format result: %v", err), nil, nil
