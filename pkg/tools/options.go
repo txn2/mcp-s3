@@ -86,7 +86,7 @@ func WithClientProvider(provider func(name string) (S3Client, error)) Option {
 }
 
 // DisableTool disables specific tools from being registered.
-func DisableTool(names ...string) Option {
+func DisableTool(names ...ToolName) Option {
 	return func(t *Toolkit) {
 		for _, name := range names {
 			t.disabledTools[name] = true
@@ -95,7 +95,7 @@ func DisableTool(names ...string) Option {
 }
 
 // EnableOnlyTools enables only the specified tools, disabling all others.
-func EnableOnlyTools(names ...string) Option {
+func EnableOnlyTools(names ...ToolName) Option {
 	return func(t *Toolkit) {
 		// Disable all tools first
 		for _, tool := range AllTools() {
@@ -105,6 +105,13 @@ func EnableOnlyTools(names ...string) Option {
 		for _, name := range names {
 			delete(t.disabledTools, name)
 		}
+	}
+}
+
+// WithToolMiddleware adds middleware for specific tools.
+func WithToolMiddleware(name ToolName, m ...ToolMiddleware) Option {
+	return func(t *Toolkit) {
+		t.toolMiddlewares[name] = append(t.toolMiddlewares[name], m...)
 	}
 }
 

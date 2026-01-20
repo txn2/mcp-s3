@@ -5,21 +5,24 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestWithMiddleware(t *testing.T) {
 	tk := &Toolkit{
-		middleware: NewToolMiddlewareRegistry(),
+		middleware: NewMiddlewareChain(),
 	}
 
 	called := false
-	mw := NewMiddlewareFunc("test", func(next ToolHandler) ToolHandler {
-		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	mw := NewMiddlewareFunc("test",
+		func(ctx context.Context, tc *ToolContext) (context.Context, error) {
 			called = true
-			return next(ctx, req)
-		}
-	})
+			return ctx, nil
+		},
+		func(ctx context.Context, tc *ToolContext, result *mcp.CallToolResult, err error) (*mcp.CallToolResult, error) {
+			return result, err
+		},
+	)
 
 	opt := WithMiddleware(mw)
 	opt(tk)
@@ -29,10 +32,8 @@ func TestWithMiddleware(t *testing.T) {
 	}
 
 	// Verify middleware works
-	handler := tk.middleware.Apply(func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return TextResult("done"), nil
-	})
-	_, _ = handler(context.Background(), mcp.CallToolRequest{})
+	tc := NewToolContext(ToolListBuckets, "")
+	_, _ = tk.middleware.Before(context.Background(), tc)
 
 	if !called {
 		t.Error("middleware was not invoked")
@@ -44,7 +45,7 @@ func TestWithInterceptor(t *testing.T) {
 		interceptors: NewInterceptorChain(),
 	}
 
-	interceptor := NewRequestInterceptorFunc("test", func(ctx context.Context, tc *ToolContext, req mcp.CallToolRequest) InterceptResult {
+	interceptor := NewRequestInterceptorFunc("test", func(ctx context.Context, tc *ToolContext, req *mcp.CallToolRequest) InterceptResult {
 		return Blocked("blocked")
 	})
 
