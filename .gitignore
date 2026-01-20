@@ -43,3 +43,4 @@ dist/
 build/
 /mcp-s3
 NOTES_*
+/mcp-s3-test
