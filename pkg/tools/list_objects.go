@@ -3,8 +3,7 @@ package tools
 import (
 	"context"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // ListObjectsResult represents the result of listing objects.
@@ -28,85 +27,59 @@ type ObjectResult struct {
 	StorageClass string `json:"storage_class,omitempty"`
 }
 
-// registerListObjects registers the s3_list_objects tool.
-func (t *Toolkit) registerListObjects(s *server.MCPServer) {
-	tool := mcp.Tool{
-		Name:        t.toolName(ToolListObjects),
-		Description: "List objects in an S3 bucket. Supports prefix filtering, delimiter for folder simulation, and pagination.",
-		InputSchema: mcp.ToolInputSchema{
-			Type:     "object",
-			Required: []string{"bucket"},
-			Properties: map[string]any{
-				"bucket": map[string]any{
-					"type":        "string",
-					"description": "Name of the S3 bucket to list objects from.",
-				},
-				"prefix": map[string]any{
-					"type":        "string",
-					"description": "Filter objects by key prefix. Only objects with keys starting with this prefix are returned.",
-				},
-				"delimiter": map[string]any{
-					"type":        "string",
-					"description": "Character used to group keys. Commonly '/' to simulate folders. Common prefixes are returned separately.",
-				},
-				"max_keys": map[string]any{
-					"type":        "integer",
-					"description": "Maximum number of objects to return (1-1000). Default: 1000.",
-					"minimum":     1,
-					"maximum":     1000,
-				},
-				"continuation_token": map[string]any{
-					"type":        "string",
-					"description": "Token from a previous response to continue listing from where you left off.",
-				},
-				"connection": map[string]any{
-					"type":        "string",
-					"description": "Name of the S3 connection to use. If not specified, uses the default connection.",
-				},
-			},
-		},
+// registerListObjectsTool registers the s3_list_objects tool.
+func (t *Toolkit) registerListObjectsTool(server *mcp.Server, cfg *toolConfig) {
+	baseHandler := func(ctx context.Context, req *mcp.CallToolRequest, input any) (*mcp.CallToolResult, any, error) {
+		listInput, ok := input.(ListObjectsInput)
+		if !ok {
+			return ErrorResult("internal error: invalid input type"), nil, nil
+		}
+		return t.handleListObjects(ctx, req, listInput)
 	}
 
-	t.registerTool(s, tool, t.handleListObjects)
+	wrappedHandler := t.wrapHandler(ToolListObjects, baseHandler, cfg)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        t.toolName(ToolListObjects),
+		Description: "List objects in an S3 bucket. Supports prefix filtering, delimiter for folder simulation, and pagination.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input ListObjectsInput) (*mcp.CallToolResult, any, error) {
+		return wrappedHandler(ctx, req, input)
+	})
 }
 
 // handleListObjects handles the s3_list_objects tool request.
-func (t *Toolkit) handleListObjects(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	// Extract arguments
-	args, err := GetArgs(request)
-	if err != nil {
-		return ErrorResult(err), nil
+func (t *Toolkit) handleListObjects(ctx context.Context, _ *mcp.CallToolRequest, input ListObjectsInput) (*mcp.CallToolResult, any, error) {
+	// Validate required parameters
+	if input.Bucket == "" {
+		return ErrorResult("bucket parameter is required"), nil, nil
 	}
 
-	// Extract parameters
-	bucket, err := RequireString(args, "bucket")
-	if err != nil {
-		return ErrorResult(err), nil
+	// Apply defaults
+	maxKeys := input.MaxKeys
+	if maxKeys <= 0 {
+		maxKeys = 1000
 	}
-
-	prefix := OptionalString(args, "prefix", "")
-	delimiter := OptionalString(args, "delimiter", "")
-	maxKeys := OptionalInt32(args, "max_keys", 1000)
-	continueToken := OptionalString(args, "continuation_token", "")
-	connectionName := OptionalString(args, "connection", "")
+	if maxKeys > 1000 {
+		maxKeys = 1000
+	}
 
 	// Get client
-	client, err := t.GetClient(connectionName)
+	client, err := t.GetClient(input.Connection)
 	if err != nil {
-		return ErrorResult(err), nil
+		return ErrorResult(err.Error()), nil, nil
 	}
 
 	// List objects
-	output, err := client.ListObjects(ctx, bucket, prefix, delimiter, maxKeys, continueToken)
+	output, err := client.ListObjects(ctx, input.Bucket, input.Prefix, input.Delimiter, maxKeys, input.ContinuationToken)
 	if err != nil {
-		return ErrorResultf("failed to list objects: %v", err), nil
+		return ErrorResultf("failed to list objects: %v", err), nil, nil
 	}
 
 	// Build result
 	result := ListObjectsResult{
-		Bucket:            bucket,
-		Prefix:            prefix,
-		Delimiter:         delimiter,
+		Bucket:            input.Bucket,
+		Prefix:            input.Prefix,
+		Delimiter:         input.Delimiter,
 		Objects:           make([]ObjectResult, 0, len(output.Objects)),
 		CommonPrefixes:    output.CommonPrefixes,
 		Count:             len(output.Objects),
@@ -127,5 +100,9 @@ func (t *Toolkit) handleListObjects(ctx context.Context, request mcp.CallToolReq
 		result.Objects = append(result.Objects, or)
 	}
 
-	return JSONResult(result)
+	jsonResult, err := JSONResult(result)
+	if err != nil {
+		return ErrorResultf("failed to format result: %v", err), nil, nil
+	}
+	return jsonResult, nil, nil
 }
