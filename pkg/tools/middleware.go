@@ -3,33 +3,37 @@ package tools
 import (
 	"context"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// ToolHandler is a function that handles a tool request.
-type ToolHandler func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error)
-
-// ToolMiddleware wraps a tool handler to add behavior before or after execution.
-// Middleware can modify the request, short-circuit execution, or modify the result.
+// ToolMiddleware provides hooks for tool execution.
+// Before is called before the handler, After is called after (in reverse order).
 type ToolMiddleware interface {
 	// Name returns a unique identifier for this middleware.
 	Name() string
 
-	// Wrap wraps the given handler with additional behavior.
-	Wrap(next ToolHandler) ToolHandler
+	// Before is called before the tool handler executes.
+	// It can modify the context or return an error to stop execution.
+	Before(ctx context.Context, tc *ToolContext) (context.Context, error)
+
+	// After is called after the tool handler executes (in reverse order).
+	// It can modify the result or handle errors.
+	After(ctx context.Context, tc *ToolContext, result *mcp.CallToolResult, handlerErr error) (*mcp.CallToolResult, error)
 }
 
-// MiddlewareFunc is a function type that implements ToolMiddleware.
+// MiddlewareFunc is a function-based implementation of ToolMiddleware.
 type MiddlewareFunc struct {
-	name   string
-	wrapFn func(ToolHandler) ToolHandler
+	name     string
+	beforeFn func(context.Context, *ToolContext) (context.Context, error)
+	afterFn  func(context.Context, *ToolContext, *mcp.CallToolResult, error) (*mcp.CallToolResult, error)
 }
 
-// NewMiddlewareFunc creates a new MiddlewareFunc with the given name and wrap function.
-func NewMiddlewareFunc(name string, wrapFn func(ToolHandler) ToolHandler) *MiddlewareFunc {
+// NewMiddlewareFunc creates a new MiddlewareFunc with the given name and functions.
+func NewMiddlewareFunc(name string, beforeFn func(context.Context, *ToolContext) (context.Context, error), afterFn func(context.Context, *ToolContext, *mcp.CallToolResult, error) (*mcp.CallToolResult, error)) *MiddlewareFunc {
 	return &MiddlewareFunc{
-		name:   name,
-		wrapFn: wrapFn,
+		name:     name,
+		beforeFn: beforeFn,
+		afterFn:  afterFn,
 	}
 }
 
@@ -38,51 +42,100 @@ func (m *MiddlewareFunc) Name() string {
 	return m.name
 }
 
-// Wrap wraps the given handler.
-func (m *MiddlewareFunc) Wrap(next ToolHandler) ToolHandler {
-	return m.wrapFn(next)
-}
-
-// ChainMiddleware chains multiple middleware together.
-// Middleware is applied in reverse order so that the first middleware
-// in the list is the outermost (first to execute).
-func ChainMiddleware(handler ToolHandler, middleware ...ToolMiddleware) ToolHandler {
-	for i := len(middleware) - 1; i >= 0; i-- {
-		handler = middleware[i].Wrap(handler)
+// Before calls the before function if set.
+func (m *MiddlewareFunc) Before(ctx context.Context, tc *ToolContext) (context.Context, error) {
+	if m.beforeFn != nil {
+		return m.beforeFn(ctx, tc)
 	}
-	return handler
+	return ctx, nil
 }
 
-// ToolMiddlewareRegistry manages a collection of middleware.
-type ToolMiddlewareRegistry struct {
-	middleware []ToolMiddleware
+// After calls the after function if set.
+func (m *MiddlewareFunc) After(ctx context.Context, tc *ToolContext, result *mcp.CallToolResult, handlerErr error) (*mcp.CallToolResult, error) {
+	if m.afterFn != nil {
+		return m.afterFn(ctx, tc, result, handlerErr)
+	}
+	return result, handlerErr
 }
 
-// NewToolMiddlewareRegistry creates a new middleware registry.
-func NewToolMiddlewareRegistry() *ToolMiddlewareRegistry {
-	return &ToolMiddlewareRegistry{
-		middleware: make([]ToolMiddleware, 0),
+// BeforeFunc creates a middleware that only runs before the handler.
+func BeforeFunc(fn func(context.Context, *ToolContext) (context.Context, error)) *MiddlewareFunc {
+	return &MiddlewareFunc{
+		name:     "before",
+		beforeFn: fn,
 	}
 }
 
-// Register adds middleware to the registry.
-func (r *ToolMiddlewareRegistry) Register(m ToolMiddleware) {
-	r.middleware = append(r.middleware, m)
+// AfterFunc creates a middleware that only runs after the handler.
+func AfterFunc(fn func(context.Context, *ToolContext, *mcp.CallToolResult, error) (*mcp.CallToolResult, error)) *MiddlewareFunc {
+	return &MiddlewareFunc{
+		name:    "after",
+		afterFn: fn,
+	}
+}
+
+// MiddlewareChain manages a collection of middleware.
+type MiddlewareChain struct {
+	middlewares []ToolMiddleware
+}
+
+// NewMiddlewareChain creates a new middleware chain.
+func NewMiddlewareChain() *MiddlewareChain {
+	return &MiddlewareChain{
+		middlewares: make([]ToolMiddleware, 0),
+	}
+}
+
+// Add adds middleware to the chain.
+func (c *MiddlewareChain) Add(m ToolMiddleware) {
+	c.middlewares = append(c.middlewares, m)
+}
+
+// Before runs all Before hooks in order.
+func (c *MiddlewareChain) Before(ctx context.Context, tc *ToolContext) (context.Context, error) {
+	var err error
+	for _, m := range c.middlewares {
+		ctx, err = m.Before(ctx, tc)
+		if err != nil {
+			return ctx, err
+		}
+	}
+	return ctx, nil
+}
+
+// After runs all After hooks in reverse order (like defer).
+func (c *MiddlewareChain) After(ctx context.Context, tc *ToolContext, result *mcp.CallToolResult, handlerErr error) (*mcp.CallToolResult, error) {
+	var err error
+	for i := len(c.middlewares) - 1; i >= 0; i-- {
+		result, err = c.middlewares[i].After(ctx, tc, result, handlerErr)
+		if err != nil {
+			handlerErr = err
+		}
+	}
+	return result, handlerErr
 }
 
 // All returns all registered middleware.
-func (r *ToolMiddlewareRegistry) All() []ToolMiddleware {
-	result := make([]ToolMiddleware, len(r.middleware))
-	copy(result, r.middleware)
+func (c *MiddlewareChain) All() []ToolMiddleware {
+	result := make([]ToolMiddleware, len(c.middlewares))
+	copy(result, c.middlewares)
 	return result
 }
 
-// Apply applies all registered middleware to a handler.
-func (r *ToolMiddlewareRegistry) Apply(handler ToolHandler) ToolHandler {
-	return ChainMiddleware(handler, r.middleware...)
+// Clear removes all middleware from the chain.
+func (c *MiddlewareChain) Clear() {
+	c.middlewares = make([]ToolMiddleware, 0)
 }
 
-// Clear removes all middleware from the registry.
-func (r *ToolMiddlewareRegistry) Clear() {
-	r.middleware = make([]ToolMiddleware, 0)
+// ToolMiddlewareRegistry manages a collection of middleware (alias for backward compatibility).
+type ToolMiddlewareRegistry = MiddlewareChain
+
+// NewToolMiddlewareRegistry creates a new middleware registry.
+func NewToolMiddlewareRegistry() *ToolMiddlewareRegistry {
+	return NewMiddlewareChain()
+}
+
+// Register adds middleware to the registry.
+func (c *MiddlewareChain) Register(m ToolMiddleware) {
+	c.Add(m)
 }
