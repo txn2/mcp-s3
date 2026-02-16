@@ -39,6 +39,7 @@ func (t *Toolkit) registerPresignURLTool(server *mcp.Server, cfg *toolConfig) {
 		Name:        t.toolName(ToolPresignURL),
 		Description: t.getDescription(ToolPresignURL, cfg),
 		Annotations: t.getAnnotations(ToolPresignURL, cfg),
+		Icons:       t.getIcons(ToolPresignURL, cfg),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input PresignURLInput) (*mcp.CallToolResult, *PresignURLResult, error) {
 		result, out, err := wrappedHandler(ctx, req, input)
 		if typed, ok := out.(*PresignURLResult); ok {

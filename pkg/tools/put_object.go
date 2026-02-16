@@ -35,6 +35,7 @@ func (t *Toolkit) registerPutObjectTool(server *mcp.Server, cfg *toolConfig) {
 		Name:        t.toolName(ToolPutObject),
 		Description: t.getDescription(ToolPutObject, cfg),
 		Annotations: t.getAnnotations(ToolPutObject, cfg),
+		Icons:       t.getIcons(ToolPutObject, cfg),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input PutObjectInput) (*mcp.CallToolResult, *PutObjectResult, error) {
 		result, out, err := wrappedHandler(ctx, req, input)
 		if typed, ok := out.(*PutObjectResult); ok {

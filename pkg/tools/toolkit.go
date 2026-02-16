@@ -24,6 +24,7 @@ type toolConfig struct {
 	middlewares []ToolMiddleware
 	description *string
 	annotations *mcp.ToolAnnotations
+	icons       []mcp.Icon
 }
 
 // ToolOption configures a single tool registration.
@@ -53,6 +54,7 @@ type Toolkit struct {
 	disabledTools     map[ToolName]bool
 	descriptions      map[ToolName]string
 	annotations       map[ToolName]*mcp.ToolAnnotations
+	icons             map[ToolName][]mcp.Icon
 
 	// Extensibility
 	middleware      *MiddlewareChain

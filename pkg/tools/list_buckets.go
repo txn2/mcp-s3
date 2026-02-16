@@ -34,6 +34,7 @@ func (t *Toolkit) registerListBucketsTool(server *mcp.Server, cfg *toolConfig) {
 		Name:        t.toolName(ToolListBuckets),
 		Description: t.getDescription(ToolListBuckets, cfg),
 		Annotations: t.getAnnotations(ToolListBuckets, cfg),
+		Icons:       t.getIcons(ToolListBuckets, cfg),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ListBucketsInput) (*mcp.CallToolResult, *ListBucketsResult, error) {
 		result, out, err := wrappedHandler(ctx, req, input)
 		if typed, ok := out.(*ListBucketsResult); ok {
