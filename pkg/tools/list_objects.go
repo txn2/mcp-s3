@@ -41,9 +41,14 @@ func (t *Toolkit) registerListObjectsTool(server *mcp.Server, cfg *toolConfig) {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        t.toolName(ToolListObjects),
-		Description: "List objects in an S3 bucket. Supports prefix filtering, delimiter for folder simulation, and pagination.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, input ListObjectsInput) (*mcp.CallToolResult, any, error) {
-		return wrappedHandler(ctx, req, input)
+		Description: t.getDescription(ToolListObjects, cfg),
+		Annotations: t.getAnnotations(ToolListObjects, cfg),
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input ListObjectsInput) (*mcp.CallToolResult, *ListObjectsResult, error) {
+		result, out, err := wrappedHandler(ctx, req, input)
+		if typed, ok := out.(*ListObjectsResult); ok {
+			return result, typed, err
+		}
+		return result, nil, err
 	})
 }
 
@@ -104,5 +109,5 @@ func (t *Toolkit) handleListObjects(ctx context.Context, _ *mcp.CallToolRequest,
 	if err != nil {
 		return ErrorResultf("failed to format result: %v", err), nil, nil
 	}
-	return jsonResult, nil, nil
+	return jsonResult, &result, nil
 }

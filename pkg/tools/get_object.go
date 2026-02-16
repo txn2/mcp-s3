@@ -40,9 +40,14 @@ func (t *Toolkit) registerGetObjectTool(server *mcp.Server, cfg *toolConfig) {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        t.toolName(ToolGetObject),
-		Description: "Retrieve the content of an S3 object. For text content, returns the content directly. For binary content, returns base64-encoded data. Large objects may be truncated based on size limits.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetObjectInput) (*mcp.CallToolResult, any, error) {
-		return wrappedHandler(ctx, req, input)
+		Description: t.getDescription(ToolGetObject, cfg),
+		Annotations: t.getAnnotations(ToolGetObject, cfg),
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetObjectInput) (*mcp.CallToolResult, *GetObjectResult, error) {
+		result, out, err := wrappedHandler(ctx, req, input)
+		if typed, ok := out.(*GetObjectResult); ok {
+			return result, typed, err
+		}
+		return result, nil, err
 	})
 }
 
@@ -79,7 +84,7 @@ func (t *Toolkit) handleGetObject(ctx context.Context, _ *mcp.CallToolRequest, i
 	if err != nil {
 		return ErrorResultf("failed to format result: %v", err), nil, nil
 	}
-	return jsonResult, nil, nil
+	return jsonResult, &result, nil
 }
 
 func (t *Toolkit) checkGetSizeLimit(ctx context.Context, client S3Client, bucket, key string) error {

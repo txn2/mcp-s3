@@ -33,9 +33,14 @@ func (t *Toolkit) registerPutObjectTool(server *mcp.Server, cfg *toolConfig) {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        t.toolName(ToolPutObject),
-		Description: "Upload an object to S3. For text content, provide the content directly. For binary content, provide base64-encoded content and set is_base64 to true. This operation may be blocked in read-only mode.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, input PutObjectInput) (*mcp.CallToolResult, any, error) {
-		return wrappedHandler(ctx, req, input)
+		Description: t.getDescription(ToolPutObject, cfg),
+		Annotations: t.getAnnotations(ToolPutObject, cfg),
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input PutObjectInput) (*mcp.CallToolResult, *PutObjectResult, error) {
+		result, out, err := wrappedHandler(ctx, req, input)
+		if typed, ok := out.(*PutObjectResult); ok {
+			return result, typed, err
+		}
+		return result, nil, err
 	})
 }
 
@@ -115,7 +120,7 @@ func (t *Toolkit) buildPutResult(input PutObjectInput, body []byte, output *clie
 	if err != nil {
 		return ErrorResultf("failed to format result: %v", err), nil, nil
 	}
-	return jsonResult, nil, nil
+	return jsonResult, &result, nil
 }
 
 func decodeContent(content string, isBase64 bool) ([]byte, error) {

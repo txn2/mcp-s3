@@ -22,6 +22,8 @@ const (
 // toolConfig holds per-tool configuration for registration.
 type toolConfig struct {
 	middlewares []ToolMiddleware
+	description *string
+	annotations *mcp.ToolAnnotations
 }
 
 // ToolOption configures a single tool registration.
@@ -49,6 +51,8 @@ type Toolkit struct {
 	maxPutSize        int64
 	toolPrefix        string
 	disabledTools     map[ToolName]bool
+	descriptions      map[ToolName]string
+	annotations       map[ToolName]*mcp.ToolAnnotations
 
 	// Extensibility
 	middleware      *MiddlewareChain

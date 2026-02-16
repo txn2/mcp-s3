@@ -32,9 +32,14 @@ func (t *Toolkit) registerGetObjectMetadataTool(server *mcp.Server, cfg *toolCon
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        t.toolName(ToolGetObjectMetadata),
-		Description: "Get metadata for an S3 object without downloading its content. Returns size, content type, last modified date, ETag, and custom metadata.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetObjectMetadataInput) (*mcp.CallToolResult, any, error) {
-		return wrappedHandler(ctx, req, input)
+		Description: t.getDescription(ToolGetObjectMetadata, cfg),
+		Annotations: t.getAnnotations(ToolGetObjectMetadata, cfg),
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetObjectMetadataInput) (*mcp.CallToolResult, *GetObjectMetadataResult, error) {
+		result, out, err := wrappedHandler(ctx, req, input)
+		if typed, ok := out.(*GetObjectMetadataResult); ok {
+			return result, typed, err
+		}
+		return result, nil, err
 	})
 }
 
@@ -79,5 +84,5 @@ func (t *Toolkit) handleGetObjectMetadata(ctx context.Context, _ *mcp.CallToolRe
 	if err != nil {
 		return ErrorResultf("failed to format result: %v", err), nil, nil
 	}
-	return jsonResult, nil, nil
+	return jsonResult, &result, nil
 }

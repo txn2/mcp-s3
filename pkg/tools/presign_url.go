@@ -32,9 +32,14 @@ func (t *Toolkit) registerPresignURLTool(server *mcp.Server, cfg *toolConfig) {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        t.toolName(ToolPresignURL),
-		Description: "Generate a presigned URL for temporary access to an S3 object. The URL allows temporary access without requiring AWS credentials. Supports both GET (download) and PUT (upload) operations.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, input PresignURLInput) (*mcp.CallToolResult, any, error) {
-		return wrappedHandler(ctx, req, input)
+		Description: t.getDescription(ToolPresignURL, cfg),
+		Annotations: t.getAnnotations(ToolPresignURL, cfg),
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input PresignURLInput) (*mcp.CallToolResult, *PresignURLResult, error) {
+		result, out, err := wrappedHandler(ctx, req, input)
+		if typed, ok := out.(*PresignURLResult); ok {
+			return result, typed, err
+		}
+		return result, nil, err
 	})
 }
 
@@ -86,7 +91,7 @@ func (t *Toolkit) handlePresignURL(ctx context.Context, _ *mcp.CallToolRequest, 
 	if err != nil {
 		return ErrorResultf("failed to format result: %v", err), nil, nil
 	}
-	return jsonResult, nil, nil
+	return jsonResult, &result, nil
 }
 
 func clampExpiration(expiresIn int) int {
