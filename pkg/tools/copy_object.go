@@ -35,6 +35,7 @@ func (t *Toolkit) registerCopyObjectTool(server *mcp.Server, cfg *toolConfig) {
 		Name:        t.toolName(ToolCopyObject),
 		Description: t.getDescription(ToolCopyObject, cfg),
 		Annotations: t.getAnnotations(ToolCopyObject, cfg),
+		Icons:       t.getIcons(ToolCopyObject, cfg),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input CopyObjectInput) (*mcp.CallToolResult, *CopyObjectResult, error) {
 		result, out, err := wrappedHandler(ctx, req, input)
 		if typed, ok := out.(*CopyObjectResult); ok {

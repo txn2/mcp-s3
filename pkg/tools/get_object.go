@@ -42,6 +42,7 @@ func (t *Toolkit) registerGetObjectTool(server *mcp.Server, cfg *toolConfig) {
 		Name:        t.toolName(ToolGetObject),
 		Description: t.getDescription(ToolGetObject, cfg),
 		Annotations: t.getAnnotations(ToolGetObject, cfg),
+		Icons:       t.getIcons(ToolGetObject, cfg),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetObjectInput) (*mcp.CallToolResult, *GetObjectResult, error) {
 		result, out, err := wrappedHandler(ctx, req, input)
 		if typed, ok := out.(*GetObjectResult); ok {

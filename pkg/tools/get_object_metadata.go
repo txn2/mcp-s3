@@ -34,6 +34,7 @@ func (t *Toolkit) registerGetObjectMetadataTool(server *mcp.Server, cfg *toolCon
 		Name:        t.toolName(ToolGetObjectMetadata),
 		Description: t.getDescription(ToolGetObjectMetadata, cfg),
 		Annotations: t.getAnnotations(ToolGetObjectMetadata, cfg),
+		Icons:       t.getIcons(ToolGetObjectMetadata, cfg),
 	}, func(
 		ctx context.Context, req *mcp.CallToolRequest, input GetObjectMetadataInput,
 	) (*mcp.CallToolResult, *GetObjectMetadataResult, error) {

@@ -29,6 +29,7 @@ func (t *Toolkit) registerDeleteObjectTool(server *mcp.Server, cfg *toolConfig) 
 		Name:        t.toolName(ToolDeleteObject),
 		Description: t.getDescription(ToolDeleteObject, cfg),
 		Annotations: t.getAnnotations(ToolDeleteObject, cfg),
+		Icons:       t.getIcons(ToolDeleteObject, cfg),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input DeleteObjectInput) (*mcp.CallToolResult, *DeleteObjectResult, error) {
 		result, out, err := wrappedHandler(ctx, req, input)
 		if typed, ok := out.(*DeleteObjectResult); ok {

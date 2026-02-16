@@ -157,6 +157,28 @@ func WithAnnotation(ann *mcp.ToolAnnotations) ToolOption {
 	}
 }
 
+// WithIcons sets toolkit-level icon overrides for tools.
+// These take priority over default icons but can be overridden
+// by per-registration WithIcon options.
+func WithIcons(icons map[ToolName][]mcp.Icon) Option {
+	return func(t *Toolkit) {
+		if t.icons == nil {
+			t.icons = make(map[ToolName][]mcp.Icon, len(icons))
+		}
+		for k, v := range icons {
+			t.icons[k] = v
+		}
+	}
+}
+
+// WithIcon sets a per-registration icon override for a single tool.
+// This has the highest priority in the icon resolution chain.
+func WithIcon(icons []mcp.Icon) ToolOption {
+	return func(cfg *toolConfig) {
+		cfg.icons = icons
+	}
+}
+
 // defaultLogger returns a default no-op logger.
 func defaultLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
