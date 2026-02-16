@@ -46,7 +46,7 @@ func (t *Toolkit) registerListConnectionsTool(server *mcp.Server, cfg *toolConfi
 }
 
 // handleListConnections handles the s3_list_connections tool request.
-func (t *Toolkit) handleListConnections(ctx context.Context, _ *mcp.CallToolRequest) (*mcp.CallToolResult, any, error) {
+func (t *Toolkit) handleListConnections(_ context.Context, _ *mcp.CallToolRequest) (*mcp.CallToolResult, any, error) {
 	connections := t.ListConnections()
 
 	result := ListConnectionsResult{

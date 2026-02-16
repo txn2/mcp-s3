@@ -58,7 +58,9 @@ type RequestInterceptorFunc struct {
 }
 
 // NewRequestInterceptorFunc creates a new RequestInterceptorFunc.
-func NewRequestInterceptorFunc(name string, fn func(context.Context, *ToolContext, *mcp.CallToolRequest) InterceptResult) *RequestInterceptorFunc {
+func NewRequestInterceptorFunc(
+	name string, fn func(context.Context, *ToolContext, *mcp.CallToolRequest) InterceptResult,
+) *RequestInterceptorFunc {
 	return &RequestInterceptorFunc{
 		name:        name,
 		interceptFn: fn,

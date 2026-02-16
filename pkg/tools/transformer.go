@@ -23,7 +23,9 @@ type ResultTransformerFunc struct {
 }
 
 // NewResultTransformerFunc creates a new ResultTransformerFunc.
-func NewResultTransformerFunc(name string, fn func(context.Context, *ToolContext, *mcp.CallToolResult) (*mcp.CallToolResult, error)) *ResultTransformerFunc {
+func NewResultTransformerFunc(
+	name string, fn func(context.Context, *ToolContext, *mcp.CallToolResult) (*mcp.CallToolResult, error),
+) *ResultTransformerFunc {
 	return &ResultTransformerFunc{
 		name:        name,
 		transformFn: fn,

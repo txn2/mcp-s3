@@ -8,6 +8,11 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+const (
+	methodGet = "GET"
+	methodPut = "PUT"
+)
+
 // PresignURLResult represents the result of generating a presigned URL.
 type PresignURLResult struct {
 	Bucket    string `json:"bucket"`
@@ -56,9 +61,9 @@ func (t *Toolkit) handlePresignURL(ctx context.Context, _ *mcp.CallToolRequest, 
 	// Apply defaults and validate method
 	method := input.Method
 	if method == "" {
-		method = "GET"
+		method = methodGet
 	}
-	if method != "GET" && method != "PUT" {
+	if method != methodGet && method != methodPut {
 		return ErrorResultf("invalid method: %s (must be GET or PUT)", method), nil, nil
 	}
 
@@ -106,7 +111,7 @@ func clampExpiration(expiresIn int) int {
 
 func generatePresignedURL(ctx context.Context, client S3Client, bucket, key, method string, expiresIn int) (*presignedURLResult, error) {
 	expires := time.Duration(expiresIn) * time.Second
-	if method == "GET" {
+	if method == methodGet {
 		url, err := client.PresignGetURL(ctx, bucket, key, expires)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate presigned GET URL: %w", err)

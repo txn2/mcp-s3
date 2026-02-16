@@ -48,7 +48,9 @@ func (m *LoggingMiddleware) Before(ctx context.Context, tc *tools.ToolContext) (
 }
 
 // After logs the completion of a tool request.
-func (m *LoggingMiddleware) After(ctx context.Context, tc *tools.ToolContext, result *mcp.CallToolResult, handlerErr error) (*mcp.CallToolResult, error) {
+func (m *LoggingMiddleware) After(
+	_ context.Context, tc *tools.ToolContext, result *mcp.CallToolResult, handlerErr error,
+) (*mcp.CallToolResult, error) {
 	// Build log attributes
 	attrs := []any{
 		"tool", tc.ToolName,
@@ -66,11 +68,12 @@ func (m *LoggingMiddleware) After(ctx context.Context, tc *tools.ToolContext, re
 	attrs = append(attrs, "duration_ms", duration.Milliseconds())
 
 	// Log result
-	if handlerErr != nil {
+	switch {
+	case handlerErr != nil:
 		m.logger.Error("tool request failed", append(attrs, "error", handlerErr.Error())...)
-	} else if result != nil && result.IsError {
+	case result != nil && result.IsError:
 		m.logger.Warn("tool request returned error", attrs...)
-	} else {
+	default:
 		m.logger.Info("tool request completed", attrs...)
 	}
 

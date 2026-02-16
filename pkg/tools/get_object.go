@@ -68,7 +68,7 @@ func (t *Toolkit) handleGetObject(ctx context.Context, _ *mcp.CallToolRequest, i
 	}
 
 	// Check size limit
-	if err := t.checkGetSizeLimit(ctx, s3Client, input.Bucket, input.Key); err != nil {
+	if err = t.checkGetSizeLimit(ctx, s3Client, input.Bucket, input.Key); err != nil {
 		return ErrorResult(err.Error()), nil, nil
 	}
 
@@ -87,11 +87,11 @@ func (t *Toolkit) handleGetObject(ctx context.Context, _ *mcp.CallToolRequest, i
 	return jsonResult, &result, nil
 }
 
-func (t *Toolkit) checkGetSizeLimit(ctx context.Context, client S3Client, bucket, key string) error {
+func (t *Toolkit) checkGetSizeLimit(ctx context.Context, s3Client S3Client, bucket, key string) error {
 	if t.maxGetSize <= 0 {
 		return nil
 	}
-	meta, err := client.GetObjectMetadata(ctx, bucket, key)
+	meta, err := s3Client.GetObjectMetadata(ctx, bucket, key)
 	if err != nil {
 		return fmt.Errorf("failed to get object metadata: %w", err)
 	}

@@ -109,13 +109,15 @@ func (m *AuditMiddleware) Name() string {
 }
 
 // Before stores the start time in context for duration calculation.
-func (m *AuditMiddleware) Before(ctx context.Context, tc *tools.ToolContext) (context.Context, error) {
+func (m *AuditMiddleware) Before(ctx context.Context, _ *tools.ToolContext) (context.Context, error) {
 	// StartTime is already set in ToolContext
 	return ctx, nil
 }
 
 // After logs the audit entry after handler execution.
-func (m *AuditMiddleware) After(ctx context.Context, tc *tools.ToolContext, result *mcp.CallToolResult, handlerErr error) (*mcp.CallToolResult, error) {
+func (m *AuditMiddleware) After(
+	_ context.Context, tc *tools.ToolContext, result *mcp.CallToolResult, handlerErr error,
+) (*mcp.CallToolResult, error) {
 	entry := AuditEntry{
 		Timestamp:  time.Now().UTC(),
 		Tool:       string(tc.ToolName),
@@ -126,10 +128,11 @@ func (m *AuditMiddleware) After(ctx context.Context, tc *tools.ToolContext, resu
 	entry.Duration = time.Since(tc.StartTime)
 	entry.DurationMs = float64(entry.Duration) / float64(time.Millisecond)
 
-	if handlerErr != nil {
+	switch {
+	case handlerErr != nil:
 		entry.Success = false
 		entry.Error = handlerErr.Error()
-	} else if result != nil && result.IsError {
+	case result != nil && result.IsError:
 		entry.Success = false
 		// Try to extract error message from result
 		if len(result.Content) > 0 {
@@ -137,12 +140,12 @@ func (m *AuditMiddleware) After(ctx context.Context, tc *tools.ToolContext, resu
 				entry.Error = text.Text
 			}
 		}
-	} else {
+	default:
 		entry.Success = true
 	}
 
-	// Log the entry (ignore errors for now)
-	_ = m.logger.Log(entry)
+	// Log the entry (best-effort; audit should not block tool execution)
+	_ = m.logger.Log(entry) //nolint:errcheck // audit logging is best-effort
 
 	return result, handlerErr
 }

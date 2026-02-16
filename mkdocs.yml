@@ -96,5 +96,11 @@ plugins:
   - search:
       separator: '[\s\-,:!=\[\]()"/]+|(?!\b)(?=[A-Z][a-z])|\.(?!\d)|&[lg]t;'
 
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/txn2/mcp-s3
+  generator: false
+
 extra_css:
   - stylesheets/extra.css

@@ -45,9 +45,9 @@ func NewManagerWithFactory(config *MultiConfig, factory func(ctx context.Context
 func (m *Manager) GetClient(ctx context.Context, name string) (tools.S3Client, error) {
 	// Check if we already have the client
 	m.mu.RLock()
-	if client, ok := m.clients[name]; ok {
+	if cached, ok := m.clients[name]; ok {
 		m.mu.RUnlock()
-		return client, nil
+		return cached, nil
 	}
 	m.mu.RUnlock()
 
@@ -56,8 +56,8 @@ func (m *Manager) GetClient(ctx context.Context, name string) (tools.S3Client, e
 	defer m.mu.Unlock()
 
 	// Double-check after acquiring write lock
-	if client, ok := m.clients[name]; ok {
-		return client, nil
+	if cached, ok := m.clients[name]; ok {
+		return cached, nil
 	}
 
 	// Get the connection config
@@ -155,8 +155,8 @@ func (m *Manager) RemoveConnection(name string) error {
 	defer m.mu.Unlock()
 
 	// Close and remove the client if it exists
-	if client, ok := m.clients[name]; ok {
-		if err := client.Close(); err != nil {
+	if existing, ok := m.clients[name]; ok {
+		if err := existing.Close(); err != nil {
 			return fmt.Errorf("failed to close client %s: %w", name, err)
 		}
 		delete(m.clients, name)

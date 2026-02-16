@@ -221,8 +221,9 @@ func (m *mockS3Client) Close() error { return nil }
 func TestNewWithDefaults(t *testing.T) {
 	// This will likely fail because there's no real S3 endpoint configured
 	// but it exercises the code path
-	_, _, _ = NewWithDefaults()
+	_, _, err := NewWithDefaults()
 	// We don't check the error because it depends on environment
+	_ = err
 }
 
 func TestCreateS3Client_WithNilClientConfig(t *testing.T) {

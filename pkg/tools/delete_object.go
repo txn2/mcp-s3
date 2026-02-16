@@ -39,7 +39,9 @@ func (t *Toolkit) registerDeleteObjectTool(server *mcp.Server, cfg *toolConfig) 
 }
 
 // handleDeleteObject handles the s3_delete_object tool request.
-func (t *Toolkit) handleDeleteObject(ctx context.Context, _ *mcp.CallToolRequest, input DeleteObjectInput) (*mcp.CallToolResult, any, error) {
+func (t *Toolkit) handleDeleteObject(
+	ctx context.Context, _ *mcp.CallToolRequest, input DeleteObjectInput,
+) (*mcp.CallToolResult, any, error) {
 	// Check read-only mode
 	if t.readOnly {
 		return ErrorResult(ErrReadOnly.Error()), nil, nil

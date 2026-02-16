@@ -34,7 +34,9 @@ func (t *Toolkit) registerGetObjectMetadataTool(server *mcp.Server, cfg *toolCon
 		Name:        t.toolName(ToolGetObjectMetadata),
 		Description: t.getDescription(ToolGetObjectMetadata, cfg),
 		Annotations: t.getAnnotations(ToolGetObjectMetadata, cfg),
-	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetObjectMetadataInput) (*mcp.CallToolResult, *GetObjectMetadataResult, error) {
+	}, func(
+		ctx context.Context, req *mcp.CallToolRequest, input GetObjectMetadataInput,
+	) (*mcp.CallToolResult, *GetObjectMetadataResult, error) {
 		result, out, err := wrappedHandler(ctx, req, input)
 		if typed, ok := out.(*GetObjectMetadataResult); ok {
 			return result, typed, err
@@ -44,7 +46,9 @@ func (t *Toolkit) registerGetObjectMetadataTool(server *mcp.Server, cfg *toolCon
 }
 
 // handleGetObjectMetadata handles the s3_get_object_metadata tool request.
-func (t *Toolkit) handleGetObjectMetadata(ctx context.Context, _ *mcp.CallToolRequest, input GetObjectMetadataInput) (*mcp.CallToolResult, any, error) {
+func (t *Toolkit) handleGetObjectMetadata(
+	ctx context.Context, _ *mcp.CallToolRequest, input GetObjectMetadataInput,
+) (*mcp.CallToolResult, any, error) {
 	// Validate required parameters
 	if input.Bucket == "" {
 		return ErrorResult("bucket parameter is required"), nil, nil

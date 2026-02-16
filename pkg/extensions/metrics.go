@@ -52,8 +52,8 @@ func (m *Metrics) getOrCreateCounter(counters map[string]*atomic.Int64, tool str
 	defer m.mu.Unlock()
 
 	// Double-check after acquiring write lock
-	if counter, ok := counters[tool]; ok {
-		return counter
+	if existing, found := counters[tool]; found {
+		return existing
 	}
 
 	counter = &atomic.Int64{}
@@ -75,8 +75,8 @@ func (m *Metrics) getOrCreateLatencyTracker(tool string) *latencyTracker {
 	defer m.mu.Unlock()
 
 	// Double-check after acquiring write lock
-	if tracker, ok := m.toolLatency[tool]; ok {
-		return tracker
+	if existing, found := m.toolLatency[tool]; found {
+		return existing
 	}
 
 	tracker = &latencyTracker{}
@@ -102,22 +102,22 @@ func (m *Metrics) RecordCall(tool string, duration time.Duration, isError bool) 
 
 	// Update min (using CAS loop)
 	for {
-		min := tracker.minNs.Load()
-		if min != 0 && min <= ns {
+		curMin := tracker.minNs.Load()
+		if curMin != 0 && curMin <= ns {
 			break
 		}
-		if tracker.minNs.CompareAndSwap(min, ns) {
+		if tracker.minNs.CompareAndSwap(curMin, ns) {
 			break
 		}
 	}
 
 	// Update max (using CAS loop)
 	for {
-		max := tracker.maxNs.Load()
-		if max >= ns {
+		curMax := tracker.maxNs.Load()
+		if curMax >= ns {
 			break
 		}
-		if tracker.maxNs.CompareAndSwap(max, ns) {
+		if tracker.maxNs.CompareAndSwap(curMax, ns) {
 			break
 		}
 	}
@@ -195,12 +195,14 @@ func (m *MetricsMiddleware) Name() string {
 }
 
 // Before is a no-op for metrics; start time is tracked in ToolContext.
-func (m *MetricsMiddleware) Before(ctx context.Context, tc *tools.ToolContext) (context.Context, error) {
+func (m *MetricsMiddleware) Before(ctx context.Context, _ *tools.ToolContext) (context.Context, error) {
 	return ctx, nil
 }
 
 // After records metrics for the tool call.
-func (m *MetricsMiddleware) After(ctx context.Context, tc *tools.ToolContext, result *mcp.CallToolResult, handlerErr error) (*mcp.CallToolResult, error) {
+func (m *MetricsMiddleware) After(
+	_ context.Context, tc *tools.ToolContext, result *mcp.CallToolResult, handlerErr error,
+) (*mcp.CallToolResult, error) {
 	duration := time.Since(tc.StartTime)
 	isError := handlerErr != nil || (result != nil && result.IsError)
 
