@@ -33,9 +33,14 @@ func (t *Toolkit) registerCopyObjectTool(server *mcp.Server, cfg *toolConfig) {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        t.toolName(ToolCopyObject),
-		Description: "Copy an object within S3, either within the same bucket or between different buckets. Can optionally update metadata during the copy. This operation may be blocked in read-only mode.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, input CopyObjectInput) (*mcp.CallToolResult, any, error) {
-		return wrappedHandler(ctx, req, input)
+		Description: t.getDescription(ToolCopyObject, cfg),
+		Annotations: t.getAnnotations(ToolCopyObject, cfg),
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input CopyObjectInput) (*mcp.CallToolResult, *CopyObjectResult, error) {
+		result, out, err := wrappedHandler(ctx, req, input)
+		if typed, ok := out.(*CopyObjectResult); ok {
+			return result, typed, err
+		}
+		return result, nil, err
 	})
 }
 
@@ -95,5 +100,5 @@ func (t *Toolkit) handleCopyObject(ctx context.Context, _ *mcp.CallToolRequest, 
 	if err != nil {
 		return ErrorResultf("failed to format result: %v", err), nil, nil
 	}
-	return jsonResult, nil, nil
+	return jsonResult, &result, nil
 }

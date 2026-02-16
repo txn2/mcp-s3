@@ -50,8 +50,11 @@ func FromEnv() Config {
 	cfg.ClientConfig = &clientCfg
 	cfg.ExtConfig = extensions.FromEnv()
 
-	// Try to load multi-server config from environment
-	multiCfg, _ := multiserver.FromEnvJSON()
+	// Try to load multi-server config from environment (errors are non-fatal)
+	multiCfg, err := multiserver.FromEnvJSON()
+	if err != nil {
+		cfg.Logger.Debug("multi-server config not loaded", "error", err)
+	}
 	cfg.MultiConfig = multiCfg
 
 	return cfg
@@ -116,8 +119,10 @@ func buildToolkitOptions(cfg Config, s3Client tools.S3Client, manager *multiserv
 
 func appendConnectionOptions(opts []tools.Option, s3Client tools.S3Client, manager *multiserver.Manager) []tools.Option {
 	if manager != nil {
-		opts = append(opts, tools.WithClientProvider(manager.ClientProvider()))
-		opts = append(opts, tools.WithDefaultConnection(manager.DefaultConnectionName()))
+		opts = append(opts,
+			tools.WithClientProvider(manager.ClientProvider()),
+			tools.WithDefaultConnection(manager.DefaultConnectionName()),
+		)
 	} else if s3Client != nil && s3Client.ConnectionName() != "" {
 		opts = append(opts, tools.WithDefaultConnection(s3Client.ConnectionName()))
 	}

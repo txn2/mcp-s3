@@ -1,49 +1,153 @@
 version: "2"
-
 run:
-  timeout: 5m
-  tests: false
-
+  modules-download-mode: readonly
 linters:
   enable:
-    - misspell
-    - unconvert
-    - nakedret
-    - prealloc
     - bodyclose
-  disable:
-    - gosec
+    - copyloopvar
+    - dogsled
+    - dupl
+    - errorlint
+    - exhaustive
+    - gochecknoinits
+    - goconst
     - gocritic
+    - gocyclo
+    - godot
+    - goprintffuncname
+    - gosec
+    - lll
+    - misspell
+    - nakedret
+    - noctx
+    - nolintlint
+    - prealloc
+    - revive
+    - staticcheck
+    - unconvert
+    - unparam
+    - whitespace
   settings:
+    dupl:
+      threshold: 100
     errcheck:
       check-type-assertions: true
-      check-blank: false
+      check-blank: true
+    errorlint:
+      errorf: true
+    exhaustive:
+      default-signifies-exhaustive: true
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+    gocritic:
+      disabled-checks:
+        - dupImport
+        - hugeParam
+        - exitAfterDefer
+      enabled-tags:
+        - diagnostic
+        - performance
+        - style
+    gocyclo:
+      min-complexity: 20
+    godot:
+      scope: declarations
+      capital: true
     govet:
       disable:
         - fieldalignment
-        - shadow
+      enable-all: true
+    lll:
+      line-length: 140
     misspell:
       locale: US
     nakedret:
       max-func-lines: 30
+    nolintlint:
+      require-explanation: true
+      require-specific: true
     prealloc:
       simple: true
       range-loops: true
-      for-loops: true
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+        - name: if-return
+        - name: increment-decrement
+        - name: var-naming
+        - name: var-declaration
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unused-parameter
+        - name: unreachable-code
+        - name: redefines-builtin-id
+    staticcheck:
+      checks:
+        - all
   exclusions:
     generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
     rules:
-      - path: _test\.go
-        linters:
+      - linters:
+          - dupl
           - errcheck
-
+          - goconst
+          - gocritic
+          - gocyclo
+          - gosec
+          - lll
+          - revive
+        path: _test\.go
+      - linters:
+          - dupl
+        path: pkg/tools/
+      - linters:
+          - dupl
+        path: pkg/client/
+      - linters:
+          - lll
+        path: pkg/tools/types\.go
+      - path: (.+)\.go$
+        text: 'unusedwrite: unused write to field'
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
 formatters:
   enable:
     - gofmt
     - goimports
   settings:
+    gofmt:
+      simplify: true
     goimports:
       local-prefixes:
         - github.com/txn2/mcp-s3
   exclusions:
     generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

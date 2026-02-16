@@ -32,9 +32,14 @@ func (t *Toolkit) registerListBucketsTool(server *mcp.Server, cfg *toolConfig) {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        t.toolName(ToolListBuckets),
-		Description: "List all accessible S3 buckets. Returns bucket names and creation dates.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, input ListBucketsInput) (*mcp.CallToolResult, any, error) {
-		return wrappedHandler(ctx, req, input)
+		Description: t.getDescription(ToolListBuckets, cfg),
+		Annotations: t.getAnnotations(ToolListBuckets, cfg),
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input ListBucketsInput) (*mcp.CallToolResult, *ListBucketsResult, error) {
+		result, out, err := wrappedHandler(ctx, req, input)
+		if typed, ok := out.(*ListBucketsResult); ok {
+			return result, typed, err
+		}
+		return result, nil, err
 	})
 }
 
@@ -72,5 +77,5 @@ func (t *Toolkit) handleListBuckets(ctx context.Context, _ *mcp.CallToolRequest,
 	if err != nil {
 		return ErrorResultf("failed to format result: %v", err), nil, nil
 	}
-	return jsonResult, nil, nil
+	return jsonResult, &result, nil
 }

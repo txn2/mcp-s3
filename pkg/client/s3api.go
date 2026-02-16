@@ -25,7 +25,7 @@ type PresignAPI interface {
 	PresignPutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
 }
 
-// Compile-time interface checks
+// Compile-time interface checks.
 var (
 	_ S3API      = (*s3.Client)(nil)
 	_ PresignAPI = (*s3.PresignClient)(nil)

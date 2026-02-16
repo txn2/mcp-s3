@@ -32,7 +32,7 @@ func (i *SizeLimitInterceptor) Name() string {
 
 // Intercept checks size limits for PUT operations.
 // GET size limits are handled in the tool itself since we need to check the object size.
-func (i *SizeLimitInterceptor) Intercept(ctx context.Context, tc *tools.ToolContext, request *mcp.CallToolRequest) tools.InterceptResult {
+func (i *SizeLimitInterceptor) Intercept(_ context.Context, tc *tools.ToolContext, request *mcp.CallToolRequest) tools.InterceptResult {
 	// Only check PUT operations for content size
 	if tc.ToolName != tools.ToolPutObject {
 		// Store the limits in context for tools to use

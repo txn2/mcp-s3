@@ -18,17 +18,18 @@ This file provides guidance to Claude Code when working with this project.
 2. **Test Coverage**: Project must maintain >80% unit test coverage. Build mocks where necessary to achieve this. Use table-driven tests where appropriate.
 
 3. **Testing Definition**: When asked to "test" or "testing" the code, this means running the full CI test suite:
-   - Unit tests with race detection (`make test` or `go test -race ./...`)
-   - Linting (`make lint` / golangci-lint)
-   - Security scanning (`gosec ./...`)
-   - All checks that run in CI must pass locally before considering code "tested"
+   - Unit tests with race detection: `go test -race ./...`
+   - Linting: `golangci-lint run` + `go vet ./...`
+   - Security scanning: `gosec ./...` and `govulncheck ./...`
+   - Cyclomatic complexity: `gocyclo -over 15 .` (must have no output)
+   - All CI checks must pass locally before considering code "tested"
 
 4. **Human Review Required**: A human must review and approve every line of code before it is committed. Therefore, commits are always performed by a human, not by Claude.
 
 5. **Go Report Card**: The project MUST always maintain 100% across all categories on [Go Report Card](https://goreportcard.com/). This includes:
    - **gofmt**: All code must be formatted with `gofmt`
    - **go vet**: No issues from `go vet`
-   - **gocyclo**: All functions must have cyclomatic complexity ≤10
+   - **gocyclo**: All functions must have cyclomatic complexity <=15
    - **golint**: No lint issues (deprecated but still checked)
    - **ineffassign**: No ineffectual assignments
    - **license**: Valid license file present
@@ -36,7 +37,7 @@ This file provides guidance to Claude Code when working with this project.
 
 6. **Diagrams**: Use Mermaid for all diagrams. Never use ASCII art.
 
-## Project Structure
+## Architecture
 
 ```
 mcp-s3/
@@ -55,6 +56,7 @@ mcp-s3/
 │   │   ├── readonly.go         # Block write operations
 │   │   ├── sizelimit.go        # Enforce size limits
 │   │   └── ...                 # Other extensions
+│   ├── integration/            # Extension interfaces for custom integrations
 │   └── multiserver/            # Multi-account support
 ├── internal/server/            # Default server setup (private)
 ├── go.mod
@@ -143,3 +145,51 @@ Environment variables:
 - `MCP_S3_EXT_SIZELIMIT` - Enforce size limits (default: true)
 - `MCP_S3_MAX_GET_SIZE` - Max bytes for GET (default: 10MB)
 - `MCP_S3_MAX_PUT_SIZE` - Max bytes for PUT (default: 100MB)
+
+## Verification (AI-Verified Development)
+
+Run the full verification suite before every commit:
+```
+make verify
+```
+
+Individual checks (all must pass):
+```
+make lint            # golangci-lint (24 linters) + go vet
+make test            # go test -race -shuffle=on ./...
+make coverage        # Coverage report (threshold: 80%)
+make security        # gosec + govulncheck
+make deadcode        # deadcode (unreachable functions)
+make build-check     # go build + go mod verify
+```
+
+Performance diagnostics (not part of verify, use when investigating):
+```
+make bench           # Run benchmarks with memory allocation reporting
+make profile         # Generate CPU and memory profiles for pprof
+```
+
+## Code Quality Thresholds
+
+- Test coverage: >=80%
+- Cyclomatic complexity: <=15 per function
+- Line length: <=140 characters
+
+## Go Code Standards (AI-Verified)
+
+1. **Error handling**: Always wrap errors with context: `fmt.Errorf("operation failed: %w", err)`
+2. **Naming**: Follow Go conventions. MixedCaps, not underscores. Acronyms are all-caps (HTTP, URL, ID).
+3. **Interfaces**: Accept interfaces, return structs. Define interfaces at the consumer, not the provider.
+4. **Context**: First parameter when needed. Never store in structs.
+5. **Concurrency**: Use channels for communication, mutexes for state. Always run tests with `-race`.
+6. **Dependencies**: Use `internal/` for code that shouldn't be imported. Minimize third-party dependencies.
+7. **Testing**: Table-driven tests. Property-based tests for pure functions.
+
+## AI-Specific Rules
+
+1. **No tautological tests**: tests must encode expected outputs, not reimplement logic
+2. **No hallucinated imports**: verify every dependency exists in the Go module ecosystem
+3. **Human review required**: all code requires human review before merge
+4. **Acceptance criteria first**: do not write code without Given/When/Then criteria
+5. **Explain non-obvious decisions**: comment WHY, not WHAT
+6. **No vaporware**: every package must be imported by non-test code

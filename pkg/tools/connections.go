@@ -34,14 +34,19 @@ func (t *Toolkit) registerListConnectionsTool(server *mcp.Server, cfg *toolConfi
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        t.toolName(ToolListConnections),
-		Description: "List all configured S3 connections. Returns connection names, regions, and endpoints (if custom endpoints are configured).",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, input ListConnectionsInput) (*mcp.CallToolResult, any, error) {
-		return wrappedHandler(ctx, req, input)
+		Description: t.getDescription(ToolListConnections, cfg),
+		Annotations: t.getAnnotations(ToolListConnections, cfg),
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input ListConnectionsInput) (*mcp.CallToolResult, *ListConnectionsResult, error) {
+		result, out, err := wrappedHandler(ctx, req, input)
+		if typed, ok := out.(*ListConnectionsResult); ok {
+			return result, typed, err
+		}
+		return result, nil, err
 	})
 }
 
 // handleListConnections handles the s3_list_connections tool request.
-func (t *Toolkit) handleListConnections(ctx context.Context, _ *mcp.CallToolRequest) (*mcp.CallToolResult, any, error) {
+func (t *Toolkit) handleListConnections(_ context.Context, _ *mcp.CallToolRequest) (*mcp.CallToolResult, any, error) {
 	connections := t.ListConnections()
 
 	result := ListConnectionsResult{
@@ -73,5 +78,5 @@ func (t *Toolkit) handleListConnections(ctx context.Context, _ *mcp.CallToolRequ
 	if err != nil {
 		return ErrorResultf("failed to format result: %v", err), nil, nil
 	}
-	return jsonResult, nil, nil
+	return jsonResult, &result, nil
 }

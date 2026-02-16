@@ -29,7 +29,11 @@ type MiddlewareFunc struct {
 }
 
 // NewMiddlewareFunc creates a new MiddlewareFunc with the given name and functions.
-func NewMiddlewareFunc(name string, beforeFn func(context.Context, *ToolContext) (context.Context, error), afterFn func(context.Context, *ToolContext, *mcp.CallToolResult, error) (*mcp.CallToolResult, error)) *MiddlewareFunc {
+func NewMiddlewareFunc(
+	name string,
+	beforeFn func(context.Context, *ToolContext) (context.Context, error),
+	afterFn func(context.Context, *ToolContext, *mcp.CallToolResult, error) (*mcp.CallToolResult, error),
+) *MiddlewareFunc {
 	return &MiddlewareFunc{
 		name:     name,
 		beforeFn: beforeFn,
@@ -51,7 +55,9 @@ func (m *MiddlewareFunc) Before(ctx context.Context, tc *ToolContext) (context.C
 }
 
 // After calls the after function if set.
-func (m *MiddlewareFunc) After(ctx context.Context, tc *ToolContext, result *mcp.CallToolResult, handlerErr error) (*mcp.CallToolResult, error) {
+func (m *MiddlewareFunc) After(
+	ctx context.Context, tc *ToolContext, result *mcp.CallToolResult, handlerErr error,
+) (*mcp.CallToolResult, error) {
 	if m.afterFn != nil {
 		return m.afterFn(ctx, tc, result, handlerErr)
 	}
@@ -104,7 +110,9 @@ func (c *MiddlewareChain) Before(ctx context.Context, tc *ToolContext) (context.
 }
 
 // After runs all After hooks in reverse order (like defer).
-func (c *MiddlewareChain) After(ctx context.Context, tc *ToolContext, result *mcp.CallToolResult, handlerErr error) (*mcp.CallToolResult, error) {
+func (c *MiddlewareChain) After(
+	ctx context.Context, tc *ToolContext, result *mcp.CallToolResult, handlerErr error,
+) (*mcp.CallToolResult, error) {
 	var err error
 	for i := len(c.middlewares) - 1; i >= 0; i-- {
 		result, err = c.middlewares[i].After(ctx, tc, result, handlerErr)

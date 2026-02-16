@@ -8,6 +8,11 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+const (
+	methodGet = "GET"
+	methodPut = "PUT"
+)
+
 // PresignURLResult represents the result of generating a presigned URL.
 type PresignURLResult struct {
 	Bucket    string `json:"bucket"`
@@ -32,9 +37,14 @@ func (t *Toolkit) registerPresignURLTool(server *mcp.Server, cfg *toolConfig) {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        t.toolName(ToolPresignURL),
-		Description: "Generate a presigned URL for temporary access to an S3 object. The URL allows temporary access without requiring AWS credentials. Supports both GET (download) and PUT (upload) operations.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, input PresignURLInput) (*mcp.CallToolResult, any, error) {
-		return wrappedHandler(ctx, req, input)
+		Description: t.getDescription(ToolPresignURL, cfg),
+		Annotations: t.getAnnotations(ToolPresignURL, cfg),
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input PresignURLInput) (*mcp.CallToolResult, *PresignURLResult, error) {
+		result, out, err := wrappedHandler(ctx, req, input)
+		if typed, ok := out.(*PresignURLResult); ok {
+			return result, typed, err
+		}
+		return result, nil, err
 	})
 }
 
@@ -51,9 +61,9 @@ func (t *Toolkit) handlePresignURL(ctx context.Context, _ *mcp.CallToolRequest, 
 	// Apply defaults and validate method
 	method := input.Method
 	if method == "" {
-		method = "GET"
+		method = methodGet
 	}
-	if method != "GET" && method != "PUT" {
+	if method != methodGet && method != methodPut {
 		return ErrorResultf("invalid method: %s (must be GET or PUT)", method), nil, nil
 	}
 
@@ -86,7 +96,7 @@ func (t *Toolkit) handlePresignURL(ctx context.Context, _ *mcp.CallToolRequest, 
 	if err != nil {
 		return ErrorResultf("failed to format result: %v", err), nil, nil
 	}
-	return jsonResult, nil, nil
+	return jsonResult, &result, nil
 }
 
 func clampExpiration(expiresIn int) int {
@@ -101,7 +111,7 @@ func clampExpiration(expiresIn int) int {
 
 func generatePresignedURL(ctx context.Context, client S3Client, bucket, key, method string, expiresIn int) (*presignedURLResult, error) {
 	expires := time.Duration(expiresIn) * time.Second
-	if method == "GET" {
+	if method == methodGet {
 		url, err := client.PresignGetURL(ctx, bucket, key, expires)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate presigned GET URL: %w", err)

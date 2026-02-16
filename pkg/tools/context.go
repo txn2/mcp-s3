@@ -10,7 +10,7 @@ import (
 type contextKey string
 
 const (
-	// toolContextKey is the context key for ToolContext.
+	// ToolContextKey is the context key for ToolContext.
 	toolContextKey contextKey = "tool_context"
 )
 

@@ -6,10 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 // mockS3API is a mock implementation of S3API for testing.
@@ -113,55 +111,5 @@ func newMockClient(s3api *mockS3API, presignAPI *mockPresignAPI) *Client {
 		presignClient:  presignAPI,
 		config:         &Config{Timeout: 30 * time.Second},
 		connectionName: "mock",
-	}
-}
-
-// Helper functions for creating test data
-
-func ptrTime(t time.Time) *time.Time {
-	return &t
-}
-
-func ptrString(s string) *string {
-	return &s
-}
-
-func ptrInt64(i int64) *int64 {
-	return &i
-}
-
-func ptrInt32(i int32) *int32 {
-	return &i
-}
-
-func ptrBool(b bool) *bool {
-	return &b
-}
-
-func testBuckets() []types.Bucket {
-	now := time.Now()
-	return []types.Bucket{
-		{Name: aws.String("bucket-1"), CreationDate: &now},
-		{Name: aws.String("bucket-2"), CreationDate: &now},
-	}
-}
-
-func testObjects() []types.Object {
-	now := time.Now()
-	return []types.Object{
-		{
-			Key:          aws.String("file1.txt"),
-			Size:         aws.Int64(1024),
-			LastModified: &now,
-			ETag:         aws.String("\"etag1\""),
-			StorageClass: types.ObjectStorageClassStandard,
-		},
-		{
-			Key:          aws.String("file2.txt"),
-			Size:         aws.Int64(2048),
-			LastModified: &now,
-			ETag:         aws.String("\"etag2\""),
-			StorageClass: types.ObjectStorageClassStandard,
-		},
 	}
 }

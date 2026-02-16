@@ -20,7 +20,7 @@ func TestFromEnv(t *testing.T) {
 	t.Run("defaults", func(t *testing.T) {
 		cfg := FromEnv()
 		assertString(t, "Region", DefaultRegion, cfg.Region)
-		assertDuration(t, "Timeout", DefaultTimeout, cfg.Timeout)
+		assertDuration(t, DefaultTimeout, cfg.Timeout)
 		assertBool(t, "UsePathStyle", false, cfg.UsePathStyle)
 		assertBool(t, "DisableSSL", false, cfg.DisableSSL)
 	})
@@ -48,7 +48,7 @@ func TestFromEnv(t *testing.T) {
 		assertString(t, "Profile", "test-profile", cfg.Profile)
 		assertString(t, "Endpoint", "http://localhost:9000", cfg.Endpoint)
 		assertBool(t, "UsePathStyle", true, cfg.UsePathStyle)
-		assertDuration(t, "Timeout", 60*time.Second, cfg.Timeout)
+		assertDuration(t, 60*time.Second, cfg.Timeout)
 		assertString(t, "Name", "test-conn", cfg.Name)
 		assertBool(t, "DisableSSL", true, cfg.DisableSSL)
 	})
@@ -64,7 +64,7 @@ func TestFromEnv(t *testing.T) {
 		os.Setenv("S3_TIMEOUT", "invalid")
 		defer os.Unsetenv("S3_TIMEOUT")
 		cfg := FromEnv()
-		assertDuration(t, "Timeout", DefaultTimeout, cfg.Timeout)
+		assertDuration(t, DefaultTimeout, cfg.Timeout)
 	})
 
 	t.Run("unresolved template variables treated as empty", func(t *testing.T) {
@@ -192,7 +192,7 @@ func TestConfig_Validate(t *testing.T) {
 			t.Errorf("unexpected error: %v", err)
 		}
 		assertString(t, "Region", DefaultRegion, cfg.Region)
-		assertDuration(t, "Timeout", DefaultTimeout, cfg.Timeout)
+		assertDuration(t, DefaultTimeout, cfg.Timeout)
 	})
 
 	t.Run("preserves custom values", func(t *testing.T) {
@@ -201,7 +201,7 @@ func TestConfig_Validate(t *testing.T) {
 			t.Errorf("unexpected error: %v", err)
 		}
 		assertString(t, "Region", "ap-southeast-1", cfg.Region)
-		assertDuration(t, "Timeout", 120*time.Second, cfg.Timeout)
+		assertDuration(t, 120*time.Second, cfg.Timeout)
 	})
 }
 
@@ -308,10 +308,10 @@ func assertString(t *testing.T, field, expected, got string) {
 	}
 }
 
-func assertDuration(t *testing.T, field string, expected, got time.Duration) {
+func assertDuration(t *testing.T, expected, got time.Duration) {
 	t.Helper()
 	if got != expected {
-		t.Errorf("%s: expected %v, got %v", field, expected, got)
+		t.Errorf("Timeout: expected %v, got %v", expected, got)
 	}
 }
 
@@ -331,7 +331,7 @@ func assertConfigEqual(t *testing.T, expected, got *Config) {
 	assertString(t, "SessionToken", expected.SessionToken, got.SessionToken)
 	assertString(t, "Profile", expected.Profile, got.Profile)
 	assertBool(t, "UsePathStyle", expected.UsePathStyle, got.UsePathStyle)
-	assertDuration(t, "Timeout", expected.Timeout, got.Timeout)
+	assertDuration(t, expected.Timeout, got.Timeout)
 	assertString(t, "Name", expected.Name, got.Name)
 	assertBool(t, "DisableSSL", expected.DisableSSL, got.DisableSSL)
 }

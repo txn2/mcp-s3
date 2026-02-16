@@ -343,7 +343,7 @@ func TestBytesReader(t *testing.T) {
 		}
 
 		n, err = reader.Read(buf)
-		if err != io.EOF {
+		if !errors.Is(err, io.EOF) {
 			t.Errorf("second read error = %v, want EOF", err)
 		}
 		if n != 0 {
@@ -357,7 +357,7 @@ func TestBytesReader(t *testing.T) {
 		buf := make([]byte, 10)
 		n, err := reader.Read(buf)
 
-		if err != io.EOF {
+		if !errors.Is(err, io.EOF) {
 			t.Errorf("error = %v, want EOF", err)
 		}
 		if n != 0 {
@@ -375,7 +375,7 @@ func TestBytesReader(t *testing.T) {
 		for {
 			n, err := reader.Read(buf)
 			result = append(result, buf[:n]...)
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			if err != nil {

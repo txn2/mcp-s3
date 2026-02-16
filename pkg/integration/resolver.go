@@ -59,10 +59,10 @@ func NewDefaultResolver(defaultConnection, defaultBucket string) *DefaultResolve
 }
 
 var (
-	// s3URIPattern matches S3 URIs: s3://[connection@]bucket/key
+	// S3URIPattern matches S3 URIs: s3://[connection@]bucket/key.
 	s3URIPattern = regexp.MustCompile(`^s3://(?:([^@]+)@)?([^/]+)/(.+)$`)
 
-	// s3ARNPattern matches S3 ARNs: arn:aws:s3:::bucket/key
+	// S3ARNPattern matches S3 ARNs: arn:aws:s3:::bucket/key.
 	s3ARNPattern = regexp.MustCompile(`^arn:aws:s3:::([^/]+)/(.+)$`)
 )
 

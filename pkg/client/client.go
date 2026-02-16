@@ -229,7 +229,9 @@ func (c *Client) ListBuckets(ctx context.Context) ([]BucketInfo, error) {
 }
 
 // ListObjects lists objects in a bucket with optional prefix, delimiter, and pagination.
-func (c *Client) ListObjects(ctx context.Context, bucket, prefix, delimiter string, maxKeys int32, continueToken string) (*ListObjectsOutput, error) {
+func (c *Client) ListObjects(
+	ctx context.Context, bucket, prefix, delimiter string, maxKeys int32, continueToken string,
+) (*ListObjectsOutput, error) {
 	ctx, cancel := c.contextWithTimeout(ctx)
 	defer cancel()
 

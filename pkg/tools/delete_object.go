@@ -27,14 +27,21 @@ func (t *Toolkit) registerDeleteObjectTool(server *mcp.Server, cfg *toolConfig) 
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        t.toolName(ToolDeleteObject),
-		Description: "Delete an object from S3. This operation is irreversible unless versioning is enabled on the bucket. This operation may be blocked in read-only mode.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, input DeleteObjectInput) (*mcp.CallToolResult, any, error) {
-		return wrappedHandler(ctx, req, input)
+		Description: t.getDescription(ToolDeleteObject, cfg),
+		Annotations: t.getAnnotations(ToolDeleteObject, cfg),
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input DeleteObjectInput) (*mcp.CallToolResult, *DeleteObjectResult, error) {
+		result, out, err := wrappedHandler(ctx, req, input)
+		if typed, ok := out.(*DeleteObjectResult); ok {
+			return result, typed, err
+		}
+		return result, nil, err
 	})
 }
 
 // handleDeleteObject handles the s3_delete_object tool request.
-func (t *Toolkit) handleDeleteObject(ctx context.Context, _ *mcp.CallToolRequest, input DeleteObjectInput) (*mcp.CallToolResult, any, error) {
+func (t *Toolkit) handleDeleteObject(
+	ctx context.Context, _ *mcp.CallToolRequest, input DeleteObjectInput,
+) (*mcp.CallToolResult, any, error) {
 	// Check read-only mode
 	if t.readOnly {
 		return ErrorResult(ErrReadOnly.Error()), nil, nil
@@ -71,5 +78,5 @@ func (t *Toolkit) handleDeleteObject(ctx context.Context, _ *mcp.CallToolRequest
 	if err != nil {
 		return ErrorResultf("failed to format result: %v", err), nil, nil
 	}
-	return jsonResult, nil, nil
+	return jsonResult, &result, nil
 }

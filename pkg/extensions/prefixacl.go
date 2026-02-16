@@ -29,7 +29,7 @@ func (i *PrefixACLInterceptor) Name() string {
 }
 
 // Intercept checks if the requested key prefix is allowed.
-func (i *PrefixACLInterceptor) Intercept(ctx context.Context, tc *tools.ToolContext, request *mcp.CallToolRequest) tools.InterceptResult {
+func (i *PrefixACLInterceptor) Intercept(_ context.Context, tc *tools.ToolContext, request *mcp.CallToolRequest) tools.InterceptResult {
 	// Get arguments
 	args, err := extractArgsFromRequest(request)
 	if err != nil || args == nil {
@@ -68,7 +68,7 @@ func (i *PrefixACLInterceptor) Intercept(ctx context.Context, tc *tools.ToolCont
 
 // extractKey extracts the object key from the request arguments based on the tool.
 func (i *PrefixACLInterceptor) extractKey(toolName tools.ToolName, args map[string]any) string {
-	switch toolName {
+	switch toolName { //nolint:exhaustive // only key-based tools need prefix checking
 	case tools.ToolGetObject, tools.ToolGetObjectMetadata, tools.ToolPutObject, tools.ToolDeleteObject, tools.ToolPresignURL:
 		if key, ok := args["key"].(string); ok {
 			return key
@@ -79,8 +79,8 @@ func (i *PrefixACLInterceptor) extractKey(toolName tools.ToolName, args map[stri
 		}
 	case tools.ToolCopyObject:
 		// Check both source and destination keys
-		sourceKey, _ := args["source_key"].(string)
-		destKey, _ := args["dest_key"].(string)
+		sourceKey, _ := args["source_key"].(string) //nolint:errcheck // type assertion with ok pattern
+		destKey, _ := args["dest_key"].(string)     //nolint:errcheck // type assertion with ok pattern
 		// Return source key for checking; dest key would need separate check
 		if sourceKey != "" {
 			return sourceKey

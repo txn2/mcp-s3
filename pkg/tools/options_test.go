@@ -100,3 +100,89 @@ func TestWithClientProvider(t *testing.T) {
 		t.Error("client provider not set")
 	}
 }
+
+func TestWithDescriptions(t *testing.T) {
+	tk := &Toolkit{}
+
+	descs := map[ToolName]string{
+		ToolListBuckets: "custom list buckets",
+		ToolGetObject:   "custom get object",
+	}
+
+	opt := WithDescriptions(descs)
+	opt(tk)
+
+	if len(tk.descriptions) != 2 {
+		t.Errorf("expected 2 descriptions, got %d", len(tk.descriptions))
+	}
+	if tk.descriptions[ToolListBuckets] != "custom list buckets" {
+		t.Errorf("unexpected description: %s", tk.descriptions[ToolListBuckets])
+	}
+
+	// Verify it's a copy, not a reference.
+	descs[ToolListBuckets] = "modified"
+	if tk.descriptions[ToolListBuckets] == "modified" {
+		t.Error("descriptions map should be copied, not referenced")
+	}
+}
+
+func TestWithDescription(t *testing.T) {
+	cfg := &toolConfig{}
+
+	opt := WithDescription("per-tool override")
+	opt(cfg)
+
+	if cfg.description == nil {
+		t.Fatal("description not set")
+	}
+	if *cfg.description != "per-tool override" {
+		t.Errorf("unexpected description: %s", *cfg.description)
+	}
+}
+
+func TestWithAnnotations(t *testing.T) {
+	tk := &Toolkit{}
+
+	anns := map[ToolName]*mcp.ToolAnnotations{
+		ToolListBuckets: {ReadOnlyHint: true},
+		ToolPutObject:   {DestructiveHint: boolPtr(false)},
+	}
+
+	opt := WithAnnotations(anns)
+	opt(tk)
+
+	if len(tk.annotations) != 2 {
+		t.Errorf("expected 2 annotations, got %d", len(tk.annotations))
+	}
+	if !tk.annotations[ToolListBuckets].ReadOnlyHint {
+		t.Error("expected ReadOnlyHint to be true for ToolListBuckets")
+	}
+
+	// Verify it's a copy, not a reference.
+	anns[ToolListBuckets] = nil
+	if tk.annotations[ToolListBuckets] == nil {
+		t.Error("annotations map should be copied, not referenced")
+	}
+}
+
+func TestWithAnnotation(t *testing.T) {
+	cfg := &toolConfig{}
+
+	ann := &mcp.ToolAnnotations{
+		ReadOnlyHint:   true,
+		IdempotentHint: true,
+	}
+
+	opt := WithAnnotation(ann)
+	opt(cfg)
+
+	if cfg.annotations == nil {
+		t.Fatal("annotations not set")
+	}
+	if !cfg.annotations.ReadOnlyHint {
+		t.Error("expected ReadOnlyHint to be true")
+	}
+	if !cfg.annotations.IdempotentHint {
+		t.Error("expected IdempotentHint to be true")
+	}
+}

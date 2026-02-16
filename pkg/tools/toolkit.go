@@ -22,6 +22,8 @@ const (
 // toolConfig holds per-tool configuration for registration.
 type toolConfig struct {
 	middlewares []ToolMiddleware
+	description *string
+	annotations *mcp.ToolAnnotations
 }
 
 // ToolOption configures a single tool registration.
@@ -49,6 +51,8 @@ type Toolkit struct {
 	maxPutSize        int64
 	toolPrefix        string
 	disabledTools     map[ToolName]bool
+	descriptions      map[ToolName]string
+	annotations       map[ToolName]*mcp.ToolAnnotations
 
 	// Extensibility
 	middleware      *MiddlewareChain
@@ -314,7 +318,9 @@ func (t *Toolkit) createToolContext(toolName ToolName) *ToolContext {
 	return tc
 }
 
-func (t *Toolkit) runInterceptors(ctx context.Context, tc *ToolContext, req *mcp.CallToolRequest, toolName ToolName) (*mcp.CallToolRequest, *mcp.CallToolResult) {
+func (t *Toolkit) runInterceptors(
+	ctx context.Context, tc *ToolContext, req *mcp.CallToolRequest, toolName ToolName,
+) (*mcp.CallToolRequest, *mcp.CallToolResult) {
 	interceptResult := t.interceptors.Intercept(ctx, tc, req)
 	if !interceptResult.Allow {
 		t.logger.Warn("request blocked by interceptor", "tool", toolName, "reason", interceptResult.Reason)
@@ -337,9 +343,15 @@ func (t *Toolkit) runBeforeHooks(ctx context.Context, tc *ToolContext, middlewar
 	return ctx, nil
 }
 
-func (t *Toolkit) runAfterHooks(ctx context.Context, tc *ToolContext, result *mcp.CallToolResult, handlerErr error, middlewares []ToolMiddleware) *mcp.CallToolResult {
+func (t *Toolkit) runAfterHooks(
+	ctx context.Context, tc *ToolContext, result *mcp.CallToolResult, handlerErr error, middlewares []ToolMiddleware,
+) *mcp.CallToolResult {
 	for i := len(middlewares) - 1; i >= 0; i-- {
-		result, _ = middlewares[i].After(ctx, tc, result, handlerErr)
+		var err error
+		result, err = middlewares[i].After(ctx, tc, result, handlerErr)
+		if err != nil {
+			handlerErr = err
+		}
 	}
 	return result
 }

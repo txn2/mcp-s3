@@ -423,8 +423,8 @@ connections:
 		}
 		defer os.Remove(tmpfile.Name())
 
-		if _, err := tmpfile.WriteString(content); err != nil {
-			t.Fatal(err)
+		if _, writeErr := tmpfile.WriteString(content); writeErr != nil {
+			t.Fatal(writeErr)
 		}
 		tmpfile.Close()
 
@@ -451,8 +451,8 @@ connections:
 		}
 		defer os.Remove(tmpfile.Name())
 
-		if _, err := tmpfile.WriteString("invalid: [yaml: content"); err != nil {
-			t.Fatal(err)
+		if _, writeErr := tmpfile.WriteString("invalid: [yaml: content"); writeErr != nil {
+			t.Fatal(writeErr)
 		}
 		tmpfile.Close()
 
@@ -472,8 +472,8 @@ func TestFromJSONFile(t *testing.T) {
 		}
 		defer os.Remove(tmpfile.Name())
 
-		if _, err := tmpfile.WriteString(content); err != nil {
-			t.Fatal(err)
+		if _, writeErr := tmpfile.WriteString(content); writeErr != nil {
+			t.Fatal(writeErr)
 		}
 		tmpfile.Close()
 
@@ -500,8 +500,8 @@ func TestFromJSONFile(t *testing.T) {
 		}
 		defer os.Remove(tmpfile.Name())
 
-		if _, err := tmpfile.WriteString("not valid json"); err != nil {
-			t.Fatal(err)
+		if _, writeErr := tmpfile.WriteString("not valid json"); writeErr != nil {
+			t.Fatal(writeErr)
 		}
 		tmpfile.Close()
 

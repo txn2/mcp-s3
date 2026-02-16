@@ -61,7 +61,9 @@ type SimpleMetadataProvider struct {
 }
 
 // NewSimpleMetadataProvider creates a simple metadata provider.
-func NewSimpleMetadataProvider(getMetadata func(ctx context.Context, ref *ObjectReference) (*ObjectMetadata, error)) *SimpleMetadataProvider {
+func NewSimpleMetadataProvider(
+	getMetadata func(ctx context.Context, ref *ObjectReference) (*ObjectMetadata, error),
+) *SimpleMetadataProvider {
 	return &SimpleMetadataProvider{
 		getMetadata: getMetadata,
 	}

@@ -3,6 +3,8 @@ package tools
 import (
 	"io"
 	"log/slog"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Option is a functional option for configuring a Toolkit.
@@ -112,6 +114,46 @@ func EnableOnlyTools(names ...ToolName) Option {
 func WithToolMiddleware(name ToolName, m ...ToolMiddleware) Option {
 	return func(t *Toolkit) {
 		t.toolMiddlewares[name] = append(t.toolMiddlewares[name], m...)
+	}
+}
+
+// WithDescriptions sets toolkit-level description overrides for tools.
+// These take priority over default descriptions but can be overridden
+// by per-registration WithDescription options.
+func WithDescriptions(descs map[ToolName]string) Option {
+	return func(t *Toolkit) {
+		t.descriptions = make(map[ToolName]string, len(descs))
+		for k, v := range descs {
+			t.descriptions[k] = v
+		}
+	}
+}
+
+// WithDescription sets a per-registration description override for a single tool.
+// This has the highest priority in the description resolution chain.
+func WithDescription(desc string) ToolOption {
+	return func(cfg *toolConfig) {
+		cfg.description = &desc
+	}
+}
+
+// WithAnnotations sets toolkit-level annotation overrides for tools.
+// These take priority over default annotations but can be overridden
+// by per-registration WithAnnotation options.
+func WithAnnotations(anns map[ToolName]*mcp.ToolAnnotations) Option {
+	return func(t *Toolkit) {
+		t.annotations = make(map[ToolName]*mcp.ToolAnnotations, len(anns))
+		for k, v := range anns {
+			t.annotations[k] = v
+		}
+	}
+}
+
+// WithAnnotation sets a per-registration annotation override for a single tool.
+// This has the highest priority in the annotation resolution chain.
+func WithAnnotation(ann *mcp.ToolAnnotations) ToolOption {
+	return func(cfg *toolConfig) {
+		cfg.annotations = ann
 	}
 }
 
