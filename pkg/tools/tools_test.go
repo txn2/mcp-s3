@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestListBuckets(t *testing.T) {
@@ -628,6 +630,131 @@ func TestCheckGetSizeLimit(t *testing.T) {
 			t.Error("expected error for size over limit")
 		}
 	})
+}
+
+// connectToolkit creates an MCP client session connected to a server with the
+// toolkit's tools registered. This exercises the full registration path
+// including typed-return wrappers.
+func connectToolkit(t *testing.T, tk *Toolkit) *mcp.ClientSession {
+	t.Helper()
+
+	ctx := context.Background()
+	ct, st := mcp.NewInMemoryTransports()
+
+	server := mcp.NewServer(
+		&mcp.Implementation{Name: "test", Version: "1.0.0"}, nil,
+	)
+	tk.RegisterAll(server)
+
+	ss, err := server.Connect(ctx, st, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ss.Close() })
+
+	client := mcp.NewClient(
+		&mcp.Implementation{Name: "test-client", Version: "1.0.0"}, nil,
+	)
+	cs, err := client.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cs.Close() })
+
+	return cs
+}
+
+// TestToolRegistration_ViaServer exercises the full registration and invocation
+// path for every tool, including the typed-return wrappers in each
+// register*Tool function.
+func TestToolRegistration_ViaServer(t *testing.T) {
+	mock := NewMockS3Client("test")
+	mock.AddBucket("my-bucket", time.Now())
+	mock.AddObject("my-bucket", "hello.txt", []byte("world"), "text/plain")
+
+	tk := NewToolkit(mock, WithDefaultConnection("test"))
+	cs := connectToolkit(t, tk)
+	ctx := context.Background()
+
+	tests := []struct {
+		name string
+		tool string
+		args map[string]any
+	}{
+		{
+			name: "list_buckets",
+			tool: "s3_list_buckets",
+			args: nil,
+		},
+		{
+			name: "list_objects",
+			tool: "s3_list_objects",
+			args: map[string]any{"bucket": "my-bucket"},
+		},
+		{
+			name: "get_object",
+			tool: "s3_get_object",
+			args: map[string]any{"bucket": "my-bucket", "key": "hello.txt"},
+		},
+		{
+			name: "get_object_metadata",
+			tool: "s3_get_object_metadata",
+			args: map[string]any{"bucket": "my-bucket", "key": "hello.txt"},
+		},
+		{
+			name: "put_object",
+			tool: "s3_put_object",
+			args: map[string]any{
+				"bucket":  "my-bucket",
+				"key":     "new.txt",
+				"content": "data",
+			},
+		},
+		{
+			name: "delete_object",
+			tool: "s3_delete_object",
+			args: map[string]any{"bucket": "my-bucket", "key": "hello.txt"},
+		},
+		{
+			name: "copy_object",
+			tool: "s3_copy_object",
+			args: map[string]any{
+				"source_bucket": "my-bucket",
+				"source_key":    "hello.txt",
+				"dest_bucket":   "my-bucket",
+				"dest_key":      "copy.txt",
+			},
+		},
+		{
+			name: "presign_url",
+			tool: "s3_presign_url",
+			args: map[string]any{
+				"bucket": "my-bucket",
+				"key":    "hello.txt",
+				"method": "GET",
+			},
+		},
+		{
+			name: "list_connections",
+			tool: "s3_list_connections",
+			args: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := cs.CallTool(ctx, &mcp.CallToolParams{
+				Name:      tt.tool,
+				Arguments: tt.args,
+			})
+			if err != nil {
+				t.Fatalf("CallTool(%s) error: %v", tt.tool, err)
+			}
+			if result == nil {
+				t.Fatalf("CallTool(%s) returned nil result", tt.tool)
+			}
+		})
+	}
 }
 
 func TestMiddlewareFuncWrapper_NilFunctions(t *testing.T) {
