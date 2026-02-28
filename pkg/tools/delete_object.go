@@ -26,10 +26,12 @@ func (t *Toolkit) registerDeleteObjectTool(server *mcp.Server, cfg *toolConfig) 
 	wrappedHandler := t.wrapHandler(ToolDeleteObject, baseHandler, cfg)
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        t.toolName(ToolDeleteObject),
-		Description: t.getDescription(ToolDeleteObject, cfg),
-		Annotations: t.getAnnotations(ToolDeleteObject, cfg),
-		Icons:       t.getIcons(ToolDeleteObject, cfg),
+		Name:         t.toolName(ToolDeleteObject),
+		Title:        t.getTitle(ToolDeleteObject, cfg),
+		Description:  t.getDescription(ToolDeleteObject, cfg),
+		Annotations:  t.getAnnotations(ToolDeleteObject, cfg),
+		Icons:        t.getIcons(ToolDeleteObject, cfg),
+		OutputSchema: t.getOutputSchema(ToolDeleteObject, cfg),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input DeleteObjectInput) (*mcp.CallToolResult, *DeleteObjectResult, error) {
 		result, out, err := wrappedHandler(ctx, req, input)
 		if typed, ok := out.(*DeleteObjectResult); ok {

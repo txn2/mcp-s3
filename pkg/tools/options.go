@@ -117,6 +117,26 @@ func WithToolMiddleware(name ToolName, m ...ToolMiddleware) Option {
 	}
 }
 
+// WithTitles sets toolkit-level human-readable title overrides for tools.
+// These take priority over default titles but can be overridden
+// by per-registration WithTitle options.
+func WithTitles(titles map[ToolName]string) Option {
+	return func(t *Toolkit) {
+		t.titles = make(map[ToolName]string, len(titles))
+		for k, v := range titles {
+			t.titles[k] = v
+		}
+	}
+}
+
+// WithTitle sets a per-registration human-readable title override for a single tool.
+// This has the highest priority in the title resolution chain.
+func WithTitle(title string) ToolOption {
+	return func(cfg *toolConfig) {
+		cfg.title = &title
+	}
+}
+
 // WithDescriptions sets toolkit-level description overrides for tools.
 // These take priority over default descriptions but can be overridden
 // by per-registration WithDescription options.
@@ -176,6 +196,26 @@ func WithIcons(icons map[ToolName][]mcp.Icon) Option {
 func WithIcon(icons []mcp.Icon) ToolOption {
 	return func(cfg *toolConfig) {
 		cfg.icons = icons
+	}
+}
+
+// WithOutputSchemas sets toolkit-level output schema overrides for tools.
+// These take priority over default output schemas but can be overridden
+// by per-registration WithOutputSchema options.
+func WithOutputSchemas(schemas map[ToolName]any) Option {
+	return func(t *Toolkit) {
+		t.outputSchemas = make(map[ToolName]any, len(schemas))
+		for k, v := range schemas {
+			t.outputSchemas[k] = v
+		}
+	}
+}
+
+// WithOutputSchema sets a per-registration output schema override for a single tool.
+// This has the highest priority in the output schema resolution chain.
+func WithOutputSchema(schema any) ToolOption {
+	return func(cfg *toolConfig) {
+		cfg.outputSchema = schema
 	}
 }
 

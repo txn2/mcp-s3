@@ -40,10 +40,12 @@ func (t *Toolkit) registerListObjectsTool(server *mcp.Server, cfg *toolConfig) {
 	wrappedHandler := t.wrapHandler(ToolListObjects, baseHandler, cfg)
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        t.toolName(ToolListObjects),
-		Description: t.getDescription(ToolListObjects, cfg),
-		Annotations: t.getAnnotations(ToolListObjects, cfg),
-		Icons:       t.getIcons(ToolListObjects, cfg),
+		Name:         t.toolName(ToolListObjects),
+		Title:        t.getTitle(ToolListObjects, cfg),
+		Description:  t.getDescription(ToolListObjects, cfg),
+		Annotations:  t.getAnnotations(ToolListObjects, cfg),
+		Icons:        t.getIcons(ToolListObjects, cfg),
+		OutputSchema: t.getOutputSchema(ToolListObjects, cfg),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ListObjectsInput) (*mcp.CallToolResult, *ListObjectsResult, error) {
 		result, out, err := wrappedHandler(ctx, req, input)
 		if typed, ok := out.(*ListObjectsResult); ok {

@@ -32,10 +32,12 @@ func (t *Toolkit) registerPutObjectTool(server *mcp.Server, cfg *toolConfig) {
 	wrappedHandler := t.wrapHandler(ToolPutObject, baseHandler, cfg)
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        t.toolName(ToolPutObject),
-		Description: t.getDescription(ToolPutObject, cfg),
-		Annotations: t.getAnnotations(ToolPutObject, cfg),
-		Icons:       t.getIcons(ToolPutObject, cfg),
+		Name:         t.toolName(ToolPutObject),
+		Title:        t.getTitle(ToolPutObject, cfg),
+		Description:  t.getDescription(ToolPutObject, cfg),
+		Annotations:  t.getAnnotations(ToolPutObject, cfg),
+		Icons:        t.getIcons(ToolPutObject, cfg),
+		OutputSchema: t.getOutputSchema(ToolPutObject, cfg),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input PutObjectInput) (*mcp.CallToolResult, *PutObjectResult, error) {
 		result, out, err := wrappedHandler(ctx, req, input)
 		if typed, ok := out.(*PutObjectResult); ok {

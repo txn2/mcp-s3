@@ -31,10 +31,12 @@ func (t *Toolkit) registerListBucketsTool(server *mcp.Server, cfg *toolConfig) {
 	wrappedHandler := t.wrapHandler(ToolListBuckets, baseHandler, cfg)
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        t.toolName(ToolListBuckets),
-		Description: t.getDescription(ToolListBuckets, cfg),
-		Annotations: t.getAnnotations(ToolListBuckets, cfg),
-		Icons:       t.getIcons(ToolListBuckets, cfg),
+		Name:         t.toolName(ToolListBuckets),
+		Title:        t.getTitle(ToolListBuckets, cfg),
+		Description:  t.getDescription(ToolListBuckets, cfg),
+		Annotations:  t.getAnnotations(ToolListBuckets, cfg),
+		Icons:        t.getIcons(ToolListBuckets, cfg),
+		OutputSchema: t.getOutputSchema(ToolListBuckets, cfg),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ListBucketsInput) (*mcp.CallToolResult, *ListBucketsResult, error) {
 		result, out, err := wrappedHandler(ctx, req, input)
 		if typed, ok := out.(*ListBucketsResult); ok {

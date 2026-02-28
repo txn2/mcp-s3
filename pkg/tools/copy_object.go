@@ -32,10 +32,12 @@ func (t *Toolkit) registerCopyObjectTool(server *mcp.Server, cfg *toolConfig) {
 	wrappedHandler := t.wrapHandler(ToolCopyObject, baseHandler, cfg)
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        t.toolName(ToolCopyObject),
-		Description: t.getDescription(ToolCopyObject, cfg),
-		Annotations: t.getAnnotations(ToolCopyObject, cfg),
-		Icons:       t.getIcons(ToolCopyObject, cfg),
+		Name:         t.toolName(ToolCopyObject),
+		Title:        t.getTitle(ToolCopyObject, cfg),
+		Description:  t.getDescription(ToolCopyObject, cfg),
+		Annotations:  t.getAnnotations(ToolCopyObject, cfg),
+		Icons:        t.getIcons(ToolCopyObject, cfg),
+		OutputSchema: t.getOutputSchema(ToolCopyObject, cfg),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input CopyObjectInput) (*mcp.CallToolResult, *CopyObjectResult, error) {
 		result, out, err := wrappedHandler(ctx, req, input)
 		if typed, ok := out.(*CopyObjectResult); ok {

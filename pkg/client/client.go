@@ -480,7 +480,7 @@ func (c *Client) contextWithTimeout(ctx context.Context) (context.Context, conte
 		}
 	}
 
-	return context.WithTimeout(ctx, c.config.Timeout)
+	return context.WithTimeout(ctx, c.config.Timeout) //#nosec G118 -- cancel func is returned to caller
 }
 
 // Close closes the S3 client and releases resources.
