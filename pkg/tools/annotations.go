@@ -18,45 +18,45 @@ var defaultAnnotations = map[ToolName]*mcp.ToolAnnotations{
 	ToolListBuckets: {
 		ReadOnlyHint:   true,
 		IdempotentHint: true,
-		OpenWorldHint:  boolPtr(false),
+		OpenWorldHint:  boolPtr(true),
 	},
 	ToolListConnections: {
 		ReadOnlyHint:   true,
 		IdempotentHint: true,
-		OpenWorldHint:  boolPtr(false),
+		OpenWorldHint:  boolPtr(true),
 	},
 	ToolListObjects: {
 		ReadOnlyHint:   true,
 		IdempotentHint: true,
-		OpenWorldHint:  boolPtr(false),
+		OpenWorldHint:  boolPtr(true),
 	},
 	ToolGetObject: {
 		ReadOnlyHint:   true,
 		IdempotentHint: true,
-		OpenWorldHint:  boolPtr(false),
+		OpenWorldHint:  boolPtr(true),
 	},
 	ToolGetObjectMetadata: {
 		ReadOnlyHint:   true,
 		IdempotentHint: true,
-		OpenWorldHint:  boolPtr(false),
+		OpenWorldHint:  boolPtr(true),
 	},
 	ToolPresignURL: {
 		ReadOnlyHint:  true,
-		OpenWorldHint: boolPtr(false),
+		OpenWorldHint: boolPtr(true),
 	},
 	ToolPutObject: {
 		DestructiveHint: boolPtr(false),
 		IdempotentHint:  true,
-		OpenWorldHint:   boolPtr(false),
+		OpenWorldHint:   boolPtr(true),
 	},
 	ToolCopyObject: {
 		DestructiveHint: boolPtr(false),
 		IdempotentHint:  true,
-		OpenWorldHint:   boolPtr(false),
+		OpenWorldHint:   boolPtr(true),
 	},
 	ToolDeleteObject: {
 		IdempotentHint: true,
-		OpenWorldHint:  boolPtr(false),
+		OpenWorldHint:  boolPtr(true),
 	},
 }
 

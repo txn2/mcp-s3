@@ -21,10 +21,12 @@ const (
 
 // toolConfig holds per-tool configuration for registration.
 type toolConfig struct {
-	middlewares []ToolMiddleware
-	description *string
-	annotations *mcp.ToolAnnotations
-	icons       []mcp.Icon
+	middlewares  []ToolMiddleware
+	title        *string
+	description  *string
+	annotations  *mcp.ToolAnnotations
+	icons        []mcp.Icon
+	outputSchema any
 }
 
 // ToolOption configures a single tool registration.
@@ -52,9 +54,11 @@ type Toolkit struct {
 	maxPutSize        int64
 	toolPrefix        string
 	disabledTools     map[ToolName]bool
+	titles            map[ToolName]string
 	descriptions      map[ToolName]string
 	annotations       map[ToolName]*mcp.ToolAnnotations
 	icons             map[ToolName][]mcp.Icon
+	outputSchemas     map[ToolName]any
 
 	// Extensibility
 	middleware      *MiddlewareChain
@@ -73,6 +77,8 @@ func NewToolkit(client S3Client, opts ...Option) *Toolkit {
 		client:          client,
 		clients:         make(map[string]S3Client),
 		disabledTools:   make(map[ToolName]bool),
+		titles:          make(map[ToolName]string),
+		outputSchemas:   make(map[ToolName]any),
 		middleware:      NewMiddlewareChain(),
 		toolMiddlewares: make(map[ToolName][]ToolMiddleware),
 		interceptors:    NewInterceptorChain(),

@@ -29,7 +29,7 @@ type Config struct {
 	SecretAccessKey string
 
 	// SessionToken is an optional session token for temporary credentials.
-	SessionToken string
+	SessionToken string //#nosec G117 -- field name is an AWS credential, not a secret exposure
 
 	// Profile is an optional AWS profile name to use from shared credentials/config.
 	Profile string

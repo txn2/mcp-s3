@@ -47,6 +47,8 @@ List objects in a bucket with optional filtering.
 
 ```json
 {
+  "bucket": "my-bucket",
+  "prefix": "path/to/",
   "objects": [
     {
       "key": "path/to/file.txt",
@@ -57,9 +59,9 @@ List objects in a bucket with optional filtering.
     }
   ],
   "common_prefixes": ["path/to/folder/"],
+  "count": 1,
   "is_truncated": false,
-  "next_continuation_token": null,
-  "key_count": 1
+  "next_continuation_token": null
 }
 ```
 
@@ -81,13 +83,15 @@ Retrieve object content.
 
 ```json
 {
+  "bucket": "my-bucket",
   "key": "path/to/file.txt",
   "content_type": "text/plain",
   "size": 1024,
   "last_modified": "2024-01-15T10:30:00Z",
   "etag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
-  "body": "File content here...",
-  "encoding": "text",
+  "content": "File content here...",
+  "is_base64": false,
+  "truncated": false,
   "metadata": {
     "custom-key": "custom-value"
   }
@@ -96,8 +100,8 @@ Retrieve object content.
 
 ### Notes
 
-- Text content is returned as-is
-- Binary content is returned as base64 with `encoding: "base64"`
+- Text content is returned as-is in `content`
+- Binary content is returned as base64 in `content` with `is_base64: true`
 - Objects larger than `MCP_S3_MAX_GET_SIZE` are rejected
 
 ---
@@ -118,6 +122,7 @@ Get object metadata without downloading content (HEAD request).
 
 ```json
 {
+  "bucket": "my-bucket",
   "key": "path/to/file.txt",
   "content_type": "text/plain",
   "content_length": 1024,
@@ -154,7 +159,8 @@ Upload an object to S3.
   "bucket": "my-bucket",
   "key": "path/to/file.txt",
   "etag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
-  "size": 1024
+  "size": 1024,
+  "version_id": "abc123"
 }
 ```
 
@@ -216,7 +222,9 @@ Copy an object within or between buckets.
   "source_key": "path/to/source.txt",
   "dest_bucket": "dest-bucket",
   "dest_key": "path/to/dest.txt",
-  "etag": "\"d41d8cd98f00b204e9800998ecf8427e\""
+  "etag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+  "last_modified": "2024-01-15T10:30:00Z",
+  "version_id": "abc123"
 }
 ```
 
@@ -244,8 +252,11 @@ Generate a presigned URL for direct access.
 
 ```json
 {
+  "bucket": "my-bucket",
+  "key": "path/to/file.txt",
   "url": "https://bucket.s3.amazonaws.com/key?X-Amz-Algorithm=...",
   "method": "GET",
+  "expires_in_seconds": 3600,
   "expires_at": "2024-01-15T11:30:00Z"
 }
 ```
@@ -274,7 +285,8 @@ None.
       "endpoint": "http://localhost:8333"
     }
   ],
-  "default": "default"
+  "default_connection": "default",
+  "count": 2
 }
 ```
 

@@ -96,6 +96,47 @@ cfg := &client.Config{
 s3Client, err := client.New(ctx, cfg)
 ```
 
+## Tool Metadata Customization
+
+Override titles, descriptions, annotations, icons, and output schemas at the toolkit level or per registration.
+
+### Toolkit-level overrides
+
+```go
+toolkit := tools.NewToolkit(s3Client,
+    // Override human-readable titles shown in MCP clients
+    tools.WithTitles(map[tools.ToolName]string{
+        tools.ToolListBuckets: "Browse Buckets",
+        tools.ToolGetObject:   "Fetch Object",
+    }),
+
+    // Override descriptions
+    tools.WithDescriptions(map[tools.ToolName]string{
+        tools.ToolListBuckets: "Show all buckets available to this service account.",
+    }),
+
+    // Override output schemas (JSON Schema 2020-12 as map[string]any)
+    tools.WithOutputSchemas(map[tools.ToolName]any{
+        tools.ToolListBuckets: map[string]any{
+            "type": "object",
+            "properties": map[string]any{
+                "buckets": map[string]any{"type": "array"},
+                "count":   map[string]any{"type": "integer"},
+            },
+        },
+    }),
+)
+```
+
+### Per-registration overrides
+
+```go
+toolkit.RegisterWith(mcpServer,
+    tools.ToolListBuckets, tools.WithTitle("Browse Buckets"),
+    tools.ToolGetObject,   tools.WithOutputSchema(customSchema),
+)
+```
+
 ## Multiple Connections
 
 ```go

@@ -31,10 +31,12 @@ func (t *Toolkit) registerGetObjectMetadataTool(server *mcp.Server, cfg *toolCon
 	wrappedHandler := t.wrapHandler(ToolGetObjectMetadata, baseHandler, cfg)
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        t.toolName(ToolGetObjectMetadata),
-		Description: t.getDescription(ToolGetObjectMetadata, cfg),
-		Annotations: t.getAnnotations(ToolGetObjectMetadata, cfg),
-		Icons:       t.getIcons(ToolGetObjectMetadata, cfg),
+		Name:         t.toolName(ToolGetObjectMetadata),
+		Title:        t.getTitle(ToolGetObjectMetadata, cfg),
+		Description:  t.getDescription(ToolGetObjectMetadata, cfg),
+		Annotations:  t.getAnnotations(ToolGetObjectMetadata, cfg),
+		Icons:        t.getIcons(ToolGetObjectMetadata, cfg),
+		OutputSchema: t.getOutputSchema(ToolGetObjectMetadata, cfg),
 	}, func(
 		ctx context.Context, req *mcp.CallToolRequest, input GetObjectMetadataInput,
 	) (*mcp.CallToolResult, *GetObjectMetadataResult, error) {

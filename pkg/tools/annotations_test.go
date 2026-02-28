@@ -82,14 +82,14 @@ func TestDefaultAnnotations(t *testing.T) {
 		}
 	})
 
-	t.Run("all tools are closed-world", func(t *testing.T) {
+	t.Run("all tools are open-world", func(t *testing.T) {
 		for _, name := range AllTools() {
 			ann := DefaultAnnotations(name)
 			if ann == nil {
 				t.Fatalf("tool %s has no default annotations", name)
 			}
-			if ann.OpenWorldHint == nil || *ann.OpenWorldHint {
-				t.Errorf("tool %s should have OpenWorldHint=false", name)
+			if ann.OpenWorldHint == nil || !*ann.OpenWorldHint {
+				t.Errorf("tool %s should have OpenWorldHint=true", name)
 			}
 		}
 	})

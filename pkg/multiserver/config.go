@@ -28,7 +28,7 @@ type ConnectionConfig struct {
 	SecretAccessKey string `json:"secret_access_key,omitempty" yaml:"secret_access_key,omitempty"`
 
 	// SessionToken is an optional session token.
-	SessionToken string `json:"session_token,omitempty" yaml:"session_token,omitempty"`
+	SessionToken string `json:"session_token,omitempty" yaml:"session_token,omitempty"` //#nosec G117 -- AWS credential field
 
 	// Profile is an optional AWS profile name.
 	Profile string `json:"profile,omitempty" yaml:"profile,omitempty"`
@@ -94,7 +94,7 @@ func FromEnvJSON() (*MultiConfig, error) {
 
 // FromYAMLFile loads multi-connection configuration from a YAML file.
 func FromYAMLFile(path string) (*MultiConfig, error) {
-	data, err := os.ReadFile(path) //#nosec G304 -- Path is intentionally user-provided config file
+	data, err := os.ReadFile(path) //#nosec G304 G703 -- Path is intentionally user-provided config file
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +109,7 @@ func FromYAMLFile(path string) (*MultiConfig, error) {
 
 // FromJSONFile loads multi-connection configuration from a JSON file.
 func FromJSONFile(path string) (*MultiConfig, error) {
-	data, err := os.ReadFile(path) //#nosec G304 -- Path is intentionally user-provided config file
+	data, err := os.ReadFile(path) //#nosec G304 G703 -- Path is intentionally user-provided config file
 	if err != nil {
 		return nil, err
 	}
