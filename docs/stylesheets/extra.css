@@ -87,10 +87,6 @@
 }
 
 /* ===== CODE BLOCKS ===== */
-[data-md-color-scheme="default"] .md-typeset pre > code {
-  background-color: #1a202c;
-}
-
 [data-md-color-scheme="default"] .md-typeset code {
   background-color: #edf2f7;
 }
