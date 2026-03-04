@@ -1,4 +1,4 @@
-# txn2/mcp-s3
+![txn2/mcp-s3](./docs/images/MCP-S3-banner.svg)
 
 [![GitHub license](https://img.shields.io/github/license/txn2/mcp-s3.svg)](https://github.com/txn2/mcp-s3/blob/main/LICENSE)
 [![Go Reference](https://pkg.go.dev/badge/github.com/txn2/mcp-s3.svg)](https://pkg.go.dev/github.com/txn2/mcp-s3)
@@ -11,6 +11,14 @@
 A Model Context Protocol (MCP) server for [Amazon S3](https://aws.amazon.com/s3/) and S3-compatible object storage, enabling AI assistants to browse buckets, read and write objects, and generate presigned URLs.
 
 AI assistants can help with file organization, data migration, and content management, but they need secure access to storage systems. mcp-s3 bridges this gap by connecting S3-compatible storage to AI assistants through the MCP protocol, with configurable safety controls and multi-account support.
+
+## MCP Data Platform Ecosystem
+
+mcp-s3 is part of a broader suite of open-source MCP servers designed to work together as a composable data platform. Each component can run standalone or be combined to give AI assistants unified access to storage, query engines, and metadata catalogs.
+
+- [txn2/mcp-data-platform](https://github.com/txn2/mcp-data-platform/)
+- [txn2/mcp-datahub](https://github.com/txn2/mcp-datahub/)
+- [txn2/mcp-trino](https://github.com/txn2/mcp-trino/)
 
 ## Core Capabilities
 
