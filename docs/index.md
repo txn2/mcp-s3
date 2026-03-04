@@ -1,9 +1,10 @@
 ---
 hide:
   - toc
+  - navigation
 ---
 
-# txn2/mcp-s3
+# ![txn2/mcp-s3](images/MCP-S3-banner.svg)
 
 An MCP server that connects AI assistants to Amazon S3 and S3-compatible object storage. Browse buckets, read and write objects, and generate presigned URLs for secure file sharing.
 
