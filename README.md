@@ -1,4 +1,4 @@
-![txn2/mcp-s3](./docs/images/MCP-S3-banner.svg)
+[![txn2/mcp-s3](./docs/images/MCP-S3-banner.svg)](https://mcp-s3.txn2.com)
 
 [![GitHub license](https://img.shields.io/github/license/txn2/mcp-s3.svg)](https://github.com/txn2/mcp-s3/blob/main/LICENSE)
 [![Go Reference](https://pkg.go.dev/badge/github.com/txn2/mcp-s3.svg)](https://pkg.go.dev/github.com/txn2/mcp-s3)
