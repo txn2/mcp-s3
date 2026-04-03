@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -367,11 +368,18 @@ func TestToolkit_Close_NoClients(t *testing.T) {
 func TestToolkit_GetClient_WithProvider(t *testing.T) {
 	mock := NewMockS3Client("default")
 
-	providerCalled := false
+	providerCallCount := 0
+	// Simulate a caching provider (like Manager.ClientProvider)
+	cachedClients := map[string]S3Client{}
 	toolkit := NewToolkit(mock,
 		WithClientProvider(func(name string) (S3Client, error) {
-			providerCalled = true
-			return NewMockS3Client(name), nil
+			providerCallCount++
+			if c, ok := cachedClients[name]; ok {
+				return c, nil
+			}
+			c := NewMockS3Client(name)
+			cachedClients[name] = c
+			return c, nil
 		}),
 	)
 
@@ -380,27 +388,59 @@ func TestToolkit_GetClient_WithProvider(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if !providerCalled {
-		t.Error("expected provider to be called")
+	if providerCallCount != 1 {
+		t.Errorf("expected provider to be called once, got %d", providerCallCount)
 	}
 
 	if client.ConnectionName() != "dynamic-conn" {
 		t.Errorf("expected connection name 'dynamic-conn', got %q", client.ConnectionName())
 	}
 
-	// Second call should use cache
-	providerCalled = false
+	// Second call delegates to provider again (Toolkit does not cache
+	// provider-sourced clients; the provider handles its own caching)
 	client2, err := toolkit.GetClient("dynamic-conn")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if providerCalled {
-		t.Error("expected provider NOT to be called for cached client")
+	if providerCallCount != 2 {
+		t.Errorf("expected provider to be called twice, got %d", providerCallCount)
 	}
 
+	// Provider's own cache returns the same instance
 	if client != client2 {
-		t.Error("expected same client instance from cache")
+		t.Error("expected same client instance from provider cache")
+	}
+}
+
+func TestToolkit_GetClient_ProviderReflectsRemoval(t *testing.T) {
+	mock := NewMockS3Client("default")
+
+	available := map[string]S3Client{
+		"conn1": NewMockS3Client("conn1"),
+	}
+	toolkit := NewToolkit(mock,
+		WithClientProvider(func(name string) (S3Client, error) {
+			if c, ok := available[name]; ok {
+				return c, nil
+			}
+			return nil, fmt.Errorf("not found: %s", name)
+		}),
+	)
+
+	// Connection exists
+	_, err := toolkit.GetClient("conn1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Simulate manager removing the connection
+	delete(available, "conn1")
+
+	// Toolkit immediately reflects the removal
+	_, err = toolkit.GetClient("conn1")
+	if err == nil {
+		t.Error("expected error after provider-side removal")
 	}
 }
 
@@ -649,5 +689,122 @@ func TestToolkit_RegisterTool_SkipsDisabled(t *testing.T) {
 	// Should not be registered
 	if toolkit.registeredTools[ToolPutObject] {
 		t.Error("expected ToolPutObject NOT to be registered when disabled")
+	}
+}
+
+func TestToolkit_RemoveClient(t *testing.T) {
+	mock1 := NewMockS3Client("conn1")
+	mock2 := NewMockS3Client("conn2")
+
+	toolkit := NewToolkit(mock1, WithDefaultConnection("conn1"))
+	toolkit.AddClient("conn2", mock2)
+
+	t.Run("remove existing client", func(t *testing.T) {
+		err := toolkit.RemoveClient("conn2")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		_, err = toolkit.GetClient("conn2")
+		if err == nil {
+			t.Error("expected error for removed client")
+		}
+	})
+
+	t.Run("remove default is rejected", func(t *testing.T) {
+		err := toolkit.RemoveClient("conn1")
+		if err == nil {
+			t.Error("expected error when removing default connection")
+		}
+	})
+
+	t.Run("empty name is rejected", func(t *testing.T) {
+		err := toolkit.RemoveClient("")
+		if err == nil {
+			t.Error("expected error for empty name")
+		}
+	})
+
+	t.Run("remove non-existent is no-op", func(t *testing.T) {
+		err := toolkit.RemoveClient("nonexistent")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+// mockConnectionManager implements ConnectionManager for testing.
+type mockConnectionManager struct {
+	connections       []string
+	defaultConnection string
+}
+
+func (m *mockConnectionManager) ListConnections() []string     { return m.connections }
+func (m *mockConnectionManager) DefaultConnectionName() string { return m.defaultConnection }
+
+func TestToolkit_ListConnections_WithConnectionManager(t *testing.T) {
+	mock := NewMockS3Client("default")
+
+	mgr := &mockConnectionManager{
+		connections:       []string{"default", "conn2", "conn3"},
+		defaultConnection: "default",
+	}
+
+	toolkit := NewToolkit(mock,
+		WithDefaultConnection("default"),
+		WithConnectionManager(mgr),
+	)
+
+	connections := toolkit.ListConnections()
+
+	if len(connections) != 3 {
+		t.Errorf("expected 3 connections, got %d: %v", len(connections), connections)
+	}
+
+	// Verify all manager connections are reported
+	found := map[string]bool{}
+	for _, c := range connections {
+		found[c] = true
+	}
+	for _, expected := range []string{"default", "conn2", "conn3"} {
+		if !found[expected] {
+			t.Errorf("expected %q in connections list", expected)
+		}
+	}
+}
+
+func TestToolkit_ListConnections_WithoutManager(t *testing.T) {
+	mock1 := NewMockS3Client("conn1")
+	mock2 := NewMockS3Client("conn2")
+
+	toolkit := NewToolkit(mock1, WithDefaultConnection("conn1"))
+	toolkit.AddClient("conn2", mock2)
+
+	connections := toolkit.ListConnections()
+
+	found := map[string]bool{}
+	for _, c := range connections {
+		found[c] = true
+	}
+
+	if !found["conn1"] {
+		t.Error("expected conn1 in connections")
+	}
+	if !found["conn2"] {
+		t.Error("expected conn2 in connections")
+	}
+}
+
+func TestWithConnectionManager(t *testing.T) {
+	mock := NewMockS3Client("test")
+	mgr := &mockConnectionManager{
+		connections:       []string{"test"},
+		defaultConnection: "test",
+	}
+
+	toolkit := NewToolkit(mock, WithConnectionManager(mgr))
+
+	if toolkit.manager == nil {
+		t.Error("expected manager to be set")
 	}
 }

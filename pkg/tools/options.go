@@ -87,6 +87,14 @@ func WithClientProvider(provider func(name string) (S3Client, error)) Option {
 	}
 }
 
+// WithConnectionManager sets a connection manager for dynamic connection management.
+// When set, ListConnections reports all configured connections (not just cached ones).
+func WithConnectionManager(m ConnectionManager) Option {
+	return func(t *Toolkit) {
+		t.manager = m
+	}
+}
+
 // DisableTool disables specific tools from being registered.
 func DisableTool(names ...ToolName) Option {
 	return func(t *Toolkit) {

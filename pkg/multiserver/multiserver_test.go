@@ -2,7 +2,9 @@ package multiserver
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,11 +14,17 @@ import (
 
 // mockClient is a minimal mock for testing.
 type mockClient struct {
-	name string
+	name   string
+	config *client.Config
 }
 
 func (m *mockClient) ConnectionName() string { return m.name }
-func (m *mockClient) Config() *client.Config { return &client.Config{Name: m.name} }
+func (m *mockClient) Config() *client.Config {
+	if m.config != nil {
+		return m.config
+	}
+	return &client.Config{Name: m.name}
+}
 func (m *mockClient) ListBuckets(ctx context.Context) ([]client.BucketInfo, error) {
 	return nil, nil
 }
@@ -206,19 +214,19 @@ func TestManager_ListConnections(t *testing.T) {
 }
 
 func TestManager_AddConnection(t *testing.T) {
-	cfg := &MultiConfig{
-		Connections: []ConnectionConfig{
-			{Name: "existing"},
-		},
-	}
-
 	factory := func(ctx context.Context, cfg *client.Config) (tools.S3Client, error) {
-		return &mockClient{name: cfg.Name}, nil
+		return &mockClient{name: cfg.Name, config: cfg}, nil
 	}
-
-	manager := NewManagerWithFactory(cfg, factory)
 
 	t.Run("add new connection", func(t *testing.T) {
+		cfg := &MultiConfig{
+			DefaultConnection: "existing",
+			Connections: []ConnectionConfig{
+				{Name: "existing"},
+			},
+		}
+		manager := NewManagerWithFactory(cfg, factory)
+
 		err := manager.AddConnection(ConnectionConfig{Name: "new", Region: "us-west-2"}, false)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -229,38 +237,227 @@ func TestManager_AddConnection(t *testing.T) {
 		}
 	})
 
-	t.Run("duplicate connection", func(t *testing.T) {
-		err := manager.AddConnection(ConnectionConfig{Name: "existing"}, false)
+	t.Run("replace existing connection", func(t *testing.T) {
+		cfg := &MultiConfig{
+			DefaultConnection: "default",
+			Connections: []ConnectionConfig{
+				{Name: "default"},
+				{Name: "replaceable", Region: "us-east-1"},
+			},
+		}
+		manager := NewManagerWithFactory(cfg, factory)
+
+		// Initialize the client first
+		_, _ = manager.GetClient(context.Background(), "replaceable")
+		if !manager.IsClientInitialized("replaceable") {
+			t.Fatal("expected client to be initialized")
+		}
+
+		// Replace with new config
+		err := manager.AddConnection(ConnectionConfig{Name: "replaceable", Region: "eu-west-1"}, false)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Old cached client should be evicted
+		if manager.IsClientInitialized("replaceable") {
+			t.Error("expected cached client to be evicted after replace")
+		}
+
+		// Connection should still exist with new config
+		if !manager.HasConnection("replaceable") {
+			t.Error("expected connection to still exist")
+		}
+
+		// Verify the new config took effect
+		newClient, err := manager.GetClient(context.Background(), "replaceable")
+		if err != nil {
+			t.Fatalf("unexpected error getting replaced client: %v", err)
+		}
+		if newClient.Config().Region != "eu-west-1" {
+			t.Errorf("expected region 'eu-west-1' after replace, got %q", newClient.Config().Region)
+		}
+	})
+
+	t.Run("add with createNow", func(t *testing.T) {
+		cfg := &MultiConfig{
+			DefaultConnection: "existing",
+			Connections: []ConnectionConfig{
+				{Name: "existing"},
+			},
+		}
+		manager := NewManagerWithFactory(cfg, factory)
+
+		err := manager.AddConnection(ConnectionConfig{Name: "eager", Region: "us-west-2"}, true)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !manager.IsClientInitialized("eager") {
+			t.Error("expected client to be initialized when createNow is true")
+		}
+	})
+
+	t.Run("cannot replace default connection", func(t *testing.T) {
+		cfg := &MultiConfig{
+			DefaultConnection: "default",
+			Connections: []ConnectionConfig{
+				{Name: "default"},
+			},
+		}
+		manager := NewManagerWithFactory(cfg, factory)
+
+		err := manager.AddConnection(ConnectionConfig{Name: "default", Region: "eu-west-1"}, false)
 		if err == nil {
-			t.Error("expected error for duplicate connection")
+			t.Error("expected error when replacing default connection")
+		}
+	})
+
+	t.Run("empty name returns error", func(t *testing.T) {
+		cfg := &MultiConfig{
+			Connections: []ConnectionConfig{},
+		}
+		manager := NewManagerWithFactory(cfg, factory)
+
+		err := manager.AddConnection(ConnectionConfig{Name: ""}, false)
+		if err == nil {
+			t.Error("expected error for empty name")
+		}
+	})
+
+	t.Run("createNow failure rolls back config for new connection", func(t *testing.T) {
+		failFactory := func(ctx context.Context, cfg *client.Config) (tools.S3Client, error) {
+			if cfg.Name == "will-fail" {
+				return nil, fmt.Errorf("simulated factory error")
+			}
+			return &mockClient{name: cfg.Name, config: cfg}, nil
+		}
+		cfg := &MultiConfig{
+			DefaultConnection: "default",
+			Connections: []ConnectionConfig{
+				{Name: "default"},
+			},
+		}
+		manager := NewManagerWithFactory(cfg, failFactory)
+
+		err := manager.AddConnection(ConnectionConfig{Name: "will-fail"}, true)
+		if err == nil {
+			t.Fatal("expected error from factory")
+		}
+
+		// Config should be rolled back — connection should not exist
+		if manager.HasConnection("will-fail") {
+			t.Error("expected config to be rolled back after factory failure")
+		}
+	})
+
+	t.Run("createNow failure rolls back config for replaced connection", func(t *testing.T) {
+		callCount := 0
+		failOnSecond := func(ctx context.Context, cfg *client.Config) (tools.S3Client, error) {
+			callCount++
+			if cfg.Name == "replaceable" && callCount > 1 {
+				return nil, fmt.Errorf("simulated factory error on replace")
+			}
+			return &mockClient{name: cfg.Name, config: cfg}, nil
+		}
+		cfg := &MultiConfig{
+			DefaultConnection: "default",
+			Connections: []ConnectionConfig{
+				{Name: "default"},
+				{Name: "replaceable", Region: "us-east-1"},
+			},
+		}
+		manager := NewManagerWithFactory(cfg, failOnSecond)
+
+		// Initialize the original client
+		_, _ = manager.GetClient(context.Background(), "replaceable")
+
+		// Replace with createNow, which will fail
+		err := manager.AddConnection(ConnectionConfig{Name: "replaceable", Region: "eu-west-1"}, true)
+		if err == nil {
+			t.Fatal("expected error from factory")
+		}
+
+		// Config should be rolled back to original
+		if !manager.HasConnection("replaceable") {
+			t.Error("expected connection to still exist after rollback")
 		}
 	})
 }
 
 func TestManager_RemoveConnection(t *testing.T) {
-	cfg := &MultiConfig{
-		Connections: []ConnectionConfig{
-			{Name: "toremove"},
-		},
-	}
-
 	factory := func(ctx context.Context, cfg *client.Config) (tools.S3Client, error) {
 		return &mockClient{name: cfg.Name}, nil
 	}
 
-	manager := NewManagerWithFactory(cfg, factory)
+	t.Run("remove existing connection", func(t *testing.T) {
+		cfg := &MultiConfig{
+			DefaultConnection: "default",
+			Connections: []ConnectionConfig{
+				{Name: "default"},
+				{Name: "toremove"},
+			},
+		}
+		manager := NewManagerWithFactory(cfg, factory)
 
-	// First initialize the client
-	_, _ = manager.GetClient(context.Background(), "toremove")
+		// Initialize the client
+		_, _ = manager.GetClient(context.Background(), "toremove")
 
-	err := manager.RemoveConnection("toremove")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+		err := manager.RemoveConnection("toremove")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
-	if manager.HasConnection("toremove") {
-		t.Error("expected connection to be removed")
-	}
+		if manager.HasConnection("toremove") {
+			t.Error("expected connection to be removed")
+		}
+		if manager.IsClientInitialized("toremove") {
+			t.Error("expected client to be closed")
+		}
+	})
+
+	t.Run("cannot remove default connection", func(t *testing.T) {
+		cfg := &MultiConfig{
+			DefaultConnection: "default",
+			Connections: []ConnectionConfig{
+				{Name: "default"},
+				{Name: "other"},
+			},
+		}
+		manager := NewManagerWithFactory(cfg, factory)
+
+		err := manager.RemoveConnection("default")
+		if err == nil {
+			t.Error("expected error when removing default connection")
+		}
+	})
+
+	t.Run("remove non-existent connection", func(t *testing.T) {
+		cfg := &MultiConfig{
+			DefaultConnection: "default",
+			Connections: []ConnectionConfig{
+				{Name: "default"},
+			},
+		}
+		manager := NewManagerWithFactory(cfg, factory)
+
+		err := manager.RemoveConnection("nonexistent")
+		if err == nil {
+			t.Error("expected error for non-existent connection")
+		}
+	})
+
+	t.Run("empty name returns error", func(t *testing.T) {
+		cfg := &MultiConfig{
+			Connections: []ConnectionConfig{},
+		}
+		manager := NewManagerWithFactory(cfg, factory)
+
+		err := manager.RemoveConnection("")
+		if err == nil {
+			t.Error("expected error for empty name")
+		}
+	})
 }
 
 func TestManager_Close(t *testing.T) {
@@ -549,5 +746,122 @@ func TestManager_GetDefaultClient_FallbackToFirst(t *testing.T) {
 	}
 	if c.ConnectionName() != "first-conn" {
 		t.Errorf("expected first-conn, got %q", c.ConnectionName())
+	}
+}
+
+func TestManager_ConcurrentAddRemove(t *testing.T) {
+	factory := func(ctx context.Context, cfg *client.Config) (tools.S3Client, error) {
+		return &mockClient{name: cfg.Name}, nil
+	}
+
+	cfg := &MultiConfig{
+		DefaultConnection: "default",
+		Connections: []ConnectionConfig{
+			{Name: "default"},
+		},
+	}
+	manager := NewManagerWithFactory(cfg, factory)
+
+	const iterations = 500
+	var wg sync.WaitGroup
+
+	// Writer goroutine: add and remove connections
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iterations; i++ {
+			_ = manager.AddConnection(ConnectionConfig{Name: "dynamic", Region: "us-east-1"}, false)
+			_ = manager.RemoveConnection("dynamic")
+		}
+	}()
+
+	// Reader goroutine: concurrent reads while add/remove is happening
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iterations; i++ {
+			_ = manager.ListConnections()
+			_ = manager.HasConnection("dynamic")
+			_ = manager.DefaultConnectionName()
+		}
+	}()
+
+	// Another writer: add with createNow
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iterations; i++ {
+			_ = manager.AddConnection(ConnectionConfig{Name: "dynamic2", Region: "eu-west-1"}, true)
+			_ = manager.RemoveConnection("dynamic2")
+		}
+	}()
+
+	wg.Wait()
+}
+
+func TestMultiConfig_addOrReplace(t *testing.T) {
+	cfg := &MultiConfig{
+		Connections: []ConnectionConfig{
+			{Name: "existing", Region: "us-east-1"},
+		},
+	}
+
+	t.Run("replace existing", func(t *testing.T) {
+		cfg.addOrReplace(ConnectionConfig{Name: "existing", Region: "eu-west-1"})
+		conn := cfg.GetConnection("existing")
+		if conn == nil {
+			t.Fatal("expected connection to exist")
+		}
+		if conn.Region != "eu-west-1" {
+			t.Errorf("expected region 'eu-west-1', got %q", conn.Region)
+		}
+		if len(cfg.Connections) != 1 {
+			t.Errorf("expected 1 connection, got %d", len(cfg.Connections))
+		}
+	})
+
+	t.Run("add new", func(t *testing.T) {
+		cfg.addOrReplace(ConnectionConfig{Name: "new", Region: "ap-southeast-1"})
+		if len(cfg.Connections) != 2 {
+			t.Errorf("expected 2 connections, got %d", len(cfg.Connections))
+		}
+	})
+}
+
+func TestMultiConfig_remove(t *testing.T) {
+	cfg := &MultiConfig{
+		Connections: []ConnectionConfig{
+			{Name: "keep"},
+			{Name: "remove"},
+		},
+	}
+
+	cfg.remove("remove")
+	if len(cfg.Connections) != 1 {
+		t.Errorf("expected 1 connection, got %d", len(cfg.Connections))
+	}
+	if cfg.Connections[0].Name != "keep" {
+		t.Errorf("expected 'keep', got %q", cfg.Connections[0].Name)
+	}
+
+	// Removing non-existent is a no-op
+	cfg.remove("nonexistent")
+	if len(cfg.Connections) != 1 {
+		t.Errorf("expected 1 connection, got %d", len(cfg.Connections))
+	}
+}
+
+func TestMultiConfig_hasConnection(t *testing.T) {
+	cfg := &MultiConfig{
+		Connections: []ConnectionConfig{
+			{Name: "exists"},
+		},
+	}
+
+	if !cfg.hasConnection("exists") {
+		t.Error("expected hasConnection to return true")
+	}
+	if cfg.hasConnection("nope") {
+		t.Error("expected hasConnection to return false")
 	}
 }

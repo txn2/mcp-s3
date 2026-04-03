@@ -140,3 +140,32 @@ func (c *MultiConfig) ConnectionNames() []string {
 	}
 	return names
 }
+
+// hasConnection returns true if a connection with the given name exists.
+// Not thread-safe; caller must hold appropriate lock.
+func (c *MultiConfig) hasConnection(name string) bool {
+	return c.GetConnection(name) != nil
+}
+
+// addOrReplace adds a connection or replaces an existing one with the same name.
+// Not thread-safe; caller must hold appropriate lock.
+func (c *MultiConfig) addOrReplace(cfg ConnectionConfig) {
+	for i := range c.Connections {
+		if c.Connections[i].Name == cfg.Name {
+			c.Connections[i] = cfg
+			return
+		}
+	}
+	c.Connections = append(c.Connections, cfg)
+}
+
+// remove removes a connection by name.
+// Not thread-safe; caller must hold appropriate lock.
+func (c *MultiConfig) remove(name string) {
+	for i := range c.Connections {
+		if c.Connections[i].Name == name {
+			c.Connections = append(c.Connections[:i], c.Connections[i+1:]...)
+			return
+		}
+	}
+}
