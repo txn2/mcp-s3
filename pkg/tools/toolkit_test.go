@@ -651,3 +651,128 @@ func TestToolkit_RegisterTool_SkipsDisabled(t *testing.T) {
 		t.Error("expected ToolPutObject NOT to be registered when disabled")
 	}
 }
+
+func TestToolkit_RemoveClient(t *testing.T) {
+	mock1 := NewMockS3Client("conn1")
+	mock2 := NewMockS3Client("conn2")
+
+	toolkit := NewToolkit(mock1, WithDefaultConnection("conn1"))
+	toolkit.AddClient("conn2", mock2)
+
+	t.Run("remove existing client", func(t *testing.T) {
+		err := toolkit.RemoveClient("conn2")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		_, err = toolkit.GetClient("conn2")
+		if err == nil {
+			t.Error("expected error for removed client")
+		}
+	})
+
+	t.Run("remove default is rejected", func(t *testing.T) {
+		err := toolkit.RemoveClient("conn1")
+		if err == nil {
+			t.Error("expected error when removing default connection")
+		}
+	})
+
+	t.Run("empty name is rejected", func(t *testing.T) {
+		err := toolkit.RemoveClient("")
+		if err == nil {
+			t.Error("expected error for empty name")
+		}
+	})
+
+	t.Run("remove non-existent is no-op", func(t *testing.T) {
+		err := toolkit.RemoveClient("nonexistent")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+// mockConnectionManager implements ConnectionManager for testing.
+type mockConnectionManager struct {
+	connections       []string
+	defaultConnection string
+}
+
+func (m *mockConnectionManager) ListConnections() []string     { return m.connections }
+func (m *mockConnectionManager) DefaultConnectionName() string { return m.defaultConnection }
+func (m *mockConnectionManager) HasConnection(name string) bool {
+	for _, c := range m.connections {
+		if c == name {
+			return true
+		}
+	}
+	return false
+}
+
+func TestToolkit_ListConnections_WithConnectionManager(t *testing.T) {
+	mock := NewMockS3Client("default")
+
+	mgr := &mockConnectionManager{
+		connections:       []string{"default", "conn2", "conn3"},
+		defaultConnection: "default",
+	}
+
+	toolkit := NewToolkit(mock,
+		WithDefaultConnection("default"),
+		WithConnectionManager(mgr),
+	)
+
+	connections := toolkit.ListConnections()
+
+	if len(connections) != 3 {
+		t.Errorf("expected 3 connections, got %d: %v", len(connections), connections)
+	}
+
+	// Verify all manager connections are reported
+	found := map[string]bool{}
+	for _, c := range connections {
+		found[c] = true
+	}
+	for _, expected := range []string{"default", "conn2", "conn3"} {
+		if !found[expected] {
+			t.Errorf("expected %q in connections list", expected)
+		}
+	}
+}
+
+func TestToolkit_ListConnections_WithoutManager(t *testing.T) {
+	mock1 := NewMockS3Client("conn1")
+	mock2 := NewMockS3Client("conn2")
+
+	toolkit := NewToolkit(mock1, WithDefaultConnection("conn1"))
+	toolkit.AddClient("conn2", mock2)
+
+	connections := toolkit.ListConnections()
+
+	found := map[string]bool{}
+	for _, c := range connections {
+		found[c] = true
+	}
+
+	if !found["conn1"] {
+		t.Error("expected conn1 in connections")
+	}
+	if !found["conn2"] {
+		t.Error("expected conn2 in connections")
+	}
+}
+
+func TestWithConnectionManager(t *testing.T) {
+	mock := NewMockS3Client("test")
+	mgr := &mockConnectionManager{
+		connections:       []string{"test"},
+		defaultConnection: "test",
+	}
+
+	toolkit := NewToolkit(mock, WithConnectionManager(mgr))
+
+	if toolkit.manager == nil {
+		t.Error("expected manager to be set")
+	}
+}

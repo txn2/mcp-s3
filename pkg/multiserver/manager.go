@@ -79,11 +79,7 @@ func (m *Manager) GetClient(ctx context.Context, name string) (tools.S3Client, e
 
 // GetDefaultClient returns the client for the default connection.
 func (m *Manager) GetDefaultClient(ctx context.Context) (tools.S3Client, error) {
-	defaultName := m.config.DefaultConnection
-	if defaultName == "" && len(m.config.Connections) > 0 {
-		defaultName = m.config.Connections[0].Name
-	}
-
+	defaultName := m.DefaultConnectionName()
 	if defaultName == "" {
 		return nil, fmt.Errorf("no default connection configured")
 	}
@@ -93,11 +89,21 @@ func (m *Manager) GetDefaultClient(ctx context.Context) (tools.S3Client, error) 
 
 // ListConnections returns a list of all available connection names.
 func (m *Manager) ListConnections() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.config.ConnectionNames()
 }
 
 // DefaultConnectionName returns the name of the default connection.
 func (m *Manager) DefaultConnectionName() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.defaultConnectionName()
+}
+
+// defaultConnectionName returns the default connection name without locking.
+// Caller must hold m.mu.
+func (m *Manager) defaultConnectionName() string {
 	if m.config.DefaultConnection != "" {
 		return m.config.DefaultConnection
 	}
@@ -130,52 +136,77 @@ func (m *Manager) Close() error {
 	return lastErr
 }
 
-// AddConnection adds a new connection configuration and optionally creates the client.
+// AddConnection adds or replaces a connection configuration.
+// If a connection with the same name already exists, the cached client is closed
+// and the configuration is replaced. The default connection cannot be replaced.
 func (m *Manager) AddConnection(cfg ConnectionConfig, createNow bool) error {
-	// Check for duplicate
-	if existing := m.config.GetConnection(cfg.Name); existing != nil {
-		return fmt.Errorf("connection already exists: %s", cfg.Name)
+	if cfg.Name == "" {
+		return fmt.Errorf("connection name must not be empty")
 	}
 
-	// Add to config
-	m.config.Connections = append(m.config.Connections, cfg)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if cfg.Name == m.defaultConnectionName() {
+		return fmt.Errorf("cannot replace the default connection %q via AddConnection", cfg.Name)
+	}
+
+	// Close existing cached client if replacing
+	if existing, ok := m.clients[cfg.Name]; ok {
+		_ = existing.Close()
+		delete(m.clients, cfg.Name)
+	}
+
+	// Add or replace in config
+	m.config.addOrReplace(cfg)
 
 	// Optionally create the client now
 	if createNow {
-		_, err := m.GetClient(context.Background(), cfg.Name)
-		return err
+		clientCfg := cfg.ToClientConfig()
+		newClient, err := m.clientFactory(context.Background(), clientCfg)
+		if err != nil {
+			return fmt.Errorf("failed to create client for %s: %w", cfg.Name, err)
+		}
+		m.clients[cfg.Name] = newClient
 	}
 
 	return nil
 }
 
-// RemoveConnection removes a connection and closes its client if it exists.
+// RemoveConnection removes a connection and closes its cached client.
+// The default connection cannot be removed.
 func (m *Manager) RemoveConnection(name string) error {
+	if name == "" {
+		return fmt.Errorf("connection name must not be empty")
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Close and remove the client if it exists
+	if name == m.defaultConnectionName() {
+		return fmt.Errorf("cannot remove the default connection %q", name)
+	}
+
+	if !m.config.hasConnection(name) {
+		return fmt.Errorf("connection %q not found", name)
+	}
+
+	// Close and remove the cached client if it exists
 	if existing, ok := m.clients[name]; ok {
-		if err := existing.Close(); err != nil {
-			return fmt.Errorf("failed to close client %s: %w", name, err)
-		}
+		_ = existing.Close()
 		delete(m.clients, name)
 	}
 
 	// Remove from config
-	for i, conn := range m.config.Connections {
-		if conn.Name == name {
-			m.config.Connections = append(m.config.Connections[:i], m.config.Connections[i+1:]...)
-			break
-		}
-	}
-
+	m.config.remove(name)
 	return nil
 }
 
 // HasConnection returns true if a connection with the given name exists.
 func (m *Manager) HasConnection(name string) bool {
-	return m.config.GetConnection(name) != nil
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.config.hasConnection(name)
 }
 
 // IsClientInitialized returns true if a client for the given connection has been created.

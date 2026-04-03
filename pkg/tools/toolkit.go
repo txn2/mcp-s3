@@ -39,6 +39,14 @@ func WithPerToolMiddleware(m ...ToolMiddleware) ToolOption {
 	}
 }
 
+// ConnectionManager provides dynamic connection management capabilities.
+// The multiserver.Manager type satisfies this interface.
+type ConnectionManager interface {
+	ListConnections() []string
+	DefaultConnectionName() string
+	HasConnection(name string) bool
+}
+
 // Toolkit provides a collection of S3 MCP tools with extensibility support.
 type Toolkit struct {
 	// Core components
@@ -46,6 +54,7 @@ type Toolkit struct {
 	clientProvider func(name string) (S3Client, error)
 	clients        map[string]S3Client
 	clientsMu      sync.RWMutex
+	manager        ConnectionManager
 
 	// Configuration
 	defaultConnection string
@@ -171,6 +180,26 @@ func (t *Toolkit) AddClient(name string, client S3Client) {
 	t.clients[name] = client
 }
 
+// RemoveClient removes a cached S3 client by name, closing it first.
+// Returns an error if the client is the default connection.
+func (t *Toolkit) RemoveClient(name string) error {
+	if name == "" {
+		return fmt.Errorf("connection name must not be empty")
+	}
+	if name == t.defaultConnection {
+		return fmt.Errorf("cannot remove the default connection %q", name)
+	}
+
+	t.clientsMu.Lock()
+	defer t.clientsMu.Unlock()
+
+	if client, ok := t.clients[name]; ok {
+		_ = client.Close()
+		delete(t.clients, name)
+	}
+	return nil
+}
+
 // GetClient returns the S3 client for the given connection name.
 // If name is empty, returns the default connection.
 func (t *Toolkit) GetClient(name string) (S3Client, error) {
@@ -216,7 +245,13 @@ func (t *Toolkit) GetClient(name string) (S3Client, error) {
 }
 
 // ListConnections returns a list of available connection names.
+// When a ConnectionManager is configured, it returns all configured connections
+// (including those not yet lazily created). Otherwise, returns only cached clients.
 func (t *Toolkit) ListConnections() []string {
+	if t.manager != nil {
+		return t.manager.ListConnections()
+	}
+
 	t.clientsMu.RLock()
 	defer t.clientsMu.RUnlock()
 

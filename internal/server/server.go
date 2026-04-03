@@ -122,6 +122,7 @@ func appendConnectionOptions(opts []tools.Option, s3Client tools.S3Client, manag
 		opts = append(opts,
 			tools.WithClientProvider(manager.ClientProvider()),
 			tools.WithDefaultConnection(manager.DefaultConnectionName()),
+			tools.WithConnectionManager(manager),
 		)
 	} else if s3Client != nil && s3Client.ConnectionName() != "" {
 		opts = append(opts, tools.WithDefaultConnection(s3Client.ConnectionName()))
