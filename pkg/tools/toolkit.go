@@ -44,7 +44,6 @@ func WithPerToolMiddleware(m ...ToolMiddleware) ToolOption {
 type ConnectionManager interface {
 	ListConnections() []string
 	DefaultConnectionName() string
-	HasConnection(name string) bool
 }
 
 // Toolkit provides a collection of S3 MCP tools with extensibility support.
@@ -180,8 +179,13 @@ func (t *Toolkit) AddClient(name string, client S3Client) {
 	t.clients[name] = client
 }
 
-// RemoveClient removes a cached S3 client by name, closing it first.
+// RemoveClient removes a locally-added S3 client by name, closing it first.
 // Returns an error if the client is the default connection.
+//
+// This only affects clients added via AddClient. For manager-backed
+// connections, use Manager.RemoveConnection instead — the Toolkit does
+// not cache provider-sourced clients, so manager removal takes effect
+// immediately.
 func (t *Toolkit) RemoveClient(name string) error {
 	if name == "" {
 		return fmt.Errorf("connection name must not be empty")
@@ -194,7 +198,9 @@ func (t *Toolkit) RemoveClient(name string) error {
 	defer t.clientsMu.Unlock()
 
 	if client, ok := t.clients[name]; ok {
-		_ = client.Close()
+		if err := client.Close(); err != nil {
+			t.logger.Warn("error closing client during removal", "connection", name, "error", err)
+		}
 		delete(t.clients, name)
 	}
 	return nil
@@ -202,12 +208,18 @@ func (t *Toolkit) RemoveClient(name string) error {
 
 // GetClient returns the S3 client for the given connection name.
 // If name is empty, returns the default connection.
+//
+// Locally-added clients (via AddClient) are checked first.
+// If not found, the client provider is called. The provider is expected
+// to handle its own caching (e.g. multiserver.Manager does this).
+// Provider-sourced clients are NOT cached in the Toolkit, so that
+// connection removal via the Manager is immediately reflected.
 func (t *Toolkit) GetClient(name string) (S3Client, error) {
 	if name == "" {
 		name = t.defaultConnection
 	}
 
-	// Check cached clients
+	// Check locally-added clients first
 	t.clientsMu.RLock()
 	if client, ok := t.clients[name]; ok {
 		t.clientsMu.RUnlock()
@@ -215,22 +227,12 @@ func (t *Toolkit) GetClient(name string) (S3Client, error) {
 	}
 	t.clientsMu.RUnlock()
 
-	// Try to create via provider
+	// Delegate to provider (which manages its own cache)
 	if t.clientProvider != nil {
-		t.clientsMu.Lock()
-		defer t.clientsMu.Unlock()
-
-		// Double-check after acquiring write lock
-		if client, ok := t.clients[name]; ok {
-			return client, nil
-		}
-
 		client, err := t.clientProvider(name)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %s", ErrConnectionNotFound, name)
 		}
-
-		t.clients[name] = client
 		return client, nil
 	}
 

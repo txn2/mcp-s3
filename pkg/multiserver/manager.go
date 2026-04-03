@@ -103,6 +103,12 @@ func (m *Manager) DefaultConnectionName() string {
 
 // defaultConnectionName returns the default connection name without locking.
 // Caller must hold m.mu.
+//
+// When DefaultConnection is not explicitly set, the first connection in the
+// list is used as the implicit default. Because AddConnection/RemoveConnection
+// protect the default from mutation, the implicit default is stable as long
+// as the caller sets DefaultConnection explicitly. If relying on the implicit
+// first-element default, be aware that it cannot be removed or replaced.
 func (m *Manager) defaultConnectionName() string {
 	if m.config.DefaultConnection != "" {
 		return m.config.DefaultConnection
@@ -139,6 +145,11 @@ func (m *Manager) Close() error {
 // AddConnection adds or replaces a connection configuration.
 // If a connection with the same name already exists, the cached client is closed
 // and the configuration is replaced. The default connection cannot be replaced.
+//
+// Note: when createNow is true, the write lock is held during client creation
+// (which may involve network I/O). This ensures atomicity but blocks concurrent
+// reads for the duration. Use createNow=false and let GetClient lazily create
+// the client if lock contention is a concern.
 func (m *Manager) AddConnection(cfg ConnectionConfig, createNow bool) error {
 	if cfg.Name == "" {
 		return fmt.Errorf("connection name must not be empty")
@@ -151,7 +162,12 @@ func (m *Manager) AddConnection(cfg ConnectionConfig, createNow bool) error {
 		return fmt.Errorf("cannot replace the default connection %q via AddConnection", cfg.Name)
 	}
 
-	// Close existing cached client if replacing
+	// Save previous config in case we need to roll back
+	previousCfg := m.config.GetConnection(cfg.Name)
+
+	// Close existing cached client if replacing.
+	// Close errors are intentionally ignored: the client is being replaced
+	// and S3 clients have no server-side session to clean up.
 	if existing, ok := m.clients[cfg.Name]; ok {
 		_ = existing.Close()
 		delete(m.clients, cfg.Name)
@@ -165,6 +181,12 @@ func (m *Manager) AddConnection(cfg ConnectionConfig, createNow bool) error {
 		clientCfg := cfg.ToClientConfig()
 		newClient, err := m.clientFactory(context.Background(), clientCfg)
 		if err != nil {
+			// Roll back: restore previous config or remove the new entry
+			if previousCfg != nil {
+				m.config.addOrReplace(*previousCfg)
+			} else {
+				m.config.remove(cfg.Name)
+			}
 			return fmt.Errorf("failed to create client for %s: %w", cfg.Name, err)
 		}
 		m.clients[cfg.Name] = newClient
@@ -191,7 +213,9 @@ func (m *Manager) RemoveConnection(name string) error {
 		return fmt.Errorf("connection %q not found", name)
 	}
 
-	// Close and remove the cached client if it exists
+	// Close and remove the cached client if it exists.
+	// Close errors are intentionally ignored: the connection is being
+	// removed and S3 clients have no server-side session to clean up.
 	if existing, ok := m.clients[name]; ok {
 		_ = existing.Close()
 		delete(m.clients, name)

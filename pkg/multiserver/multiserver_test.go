@@ -2,7 +2,9 @@ package multiserver
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,11 +14,17 @@ import (
 
 // mockClient is a minimal mock for testing.
 type mockClient struct {
-	name string
+	name   string
+	config *client.Config
 }
 
 func (m *mockClient) ConnectionName() string { return m.name }
-func (m *mockClient) Config() *client.Config { return &client.Config{Name: m.name} }
+func (m *mockClient) Config() *client.Config {
+	if m.config != nil {
+		return m.config
+	}
+	return &client.Config{Name: m.name}
+}
 func (m *mockClient) ListBuckets(ctx context.Context) ([]client.BucketInfo, error) {
 	return nil, nil
 }
@@ -207,7 +215,7 @@ func TestManager_ListConnections(t *testing.T) {
 
 func TestManager_AddConnection(t *testing.T) {
 	factory := func(ctx context.Context, cfg *client.Config) (tools.S3Client, error) {
-		return &mockClient{name: cfg.Name}, nil
+		return &mockClient{name: cfg.Name, config: cfg}, nil
 	}
 
 	t.Run("add new connection", func(t *testing.T) {
@@ -260,6 +268,15 @@ func TestManager_AddConnection(t *testing.T) {
 		if !manager.HasConnection("replaceable") {
 			t.Error("expected connection to still exist")
 		}
+
+		// Verify the new config took effect
+		newClient, err := manager.GetClient(context.Background(), "replaceable")
+		if err != nil {
+			t.Fatalf("unexpected error getting replaced client: %v", err)
+		}
+		if newClient.Config().Region != "eu-west-1" {
+			t.Errorf("expected region 'eu-west-1' after replace, got %q", newClient.Config().Region)
+		}
 	})
 
 	t.Run("add with createNow", func(t *testing.T) {
@@ -305,6 +322,65 @@ func TestManager_AddConnection(t *testing.T) {
 		err := manager.AddConnection(ConnectionConfig{Name: ""}, false)
 		if err == nil {
 			t.Error("expected error for empty name")
+		}
+	})
+
+	t.Run("createNow failure rolls back config for new connection", func(t *testing.T) {
+		failFactory := func(ctx context.Context, cfg *client.Config) (tools.S3Client, error) {
+			if cfg.Name == "will-fail" {
+				return nil, fmt.Errorf("simulated factory error")
+			}
+			return &mockClient{name: cfg.Name, config: cfg}, nil
+		}
+		cfg := &MultiConfig{
+			DefaultConnection: "default",
+			Connections: []ConnectionConfig{
+				{Name: "default"},
+			},
+		}
+		manager := NewManagerWithFactory(cfg, failFactory)
+
+		err := manager.AddConnection(ConnectionConfig{Name: "will-fail"}, true)
+		if err == nil {
+			t.Fatal("expected error from factory")
+		}
+
+		// Config should be rolled back — connection should not exist
+		if manager.HasConnection("will-fail") {
+			t.Error("expected config to be rolled back after factory failure")
+		}
+	})
+
+	t.Run("createNow failure rolls back config for replaced connection", func(t *testing.T) {
+		callCount := 0
+		failOnSecond := func(ctx context.Context, cfg *client.Config) (tools.S3Client, error) {
+			callCount++
+			if cfg.Name == "replaceable" && callCount > 1 {
+				return nil, fmt.Errorf("simulated factory error on replace")
+			}
+			return &mockClient{name: cfg.Name, config: cfg}, nil
+		}
+		cfg := &MultiConfig{
+			DefaultConnection: "default",
+			Connections: []ConnectionConfig{
+				{Name: "default"},
+				{Name: "replaceable", Region: "us-east-1"},
+			},
+		}
+		manager := NewManagerWithFactory(cfg, failOnSecond)
+
+		// Initialize the original client
+		_, _ = manager.GetClient(context.Background(), "replaceable")
+
+		// Replace with createNow, which will fail
+		err := manager.AddConnection(ConnectionConfig{Name: "replaceable", Region: "eu-west-1"}, true)
+		if err == nil {
+			t.Fatal("expected error from factory")
+		}
+
+		// Config should be rolled back to original
+		if !manager.HasConnection("replaceable") {
+			t.Error("expected connection to still exist after rollback")
 		}
 	})
 }
@@ -686,23 +762,41 @@ func TestManager_ConcurrentAddRemove(t *testing.T) {
 	}
 	manager := NewManagerWithFactory(cfg, factory)
 
-	done := make(chan struct{})
+	const iterations = 500
+	var wg sync.WaitGroup
+
+	// Writer goroutine: add and remove connections
+	wg.Add(1)
 	go func() {
-		defer close(done)
-		for i := 0; i < 100; i++ {
+		defer wg.Done()
+		for i := 0; i < iterations; i++ {
 			_ = manager.AddConnection(ConnectionConfig{Name: "dynamic", Region: "us-east-1"}, false)
 			_ = manager.RemoveConnection("dynamic")
 		}
 	}()
 
-	// Concurrent reads while add/remove is happening
-	for i := 0; i < 100; i++ {
-		_ = manager.ListConnections()
-		_ = manager.HasConnection("dynamic")
-		_ = manager.DefaultConnectionName()
-	}
+	// Reader goroutine: concurrent reads while add/remove is happening
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iterations; i++ {
+			_ = manager.ListConnections()
+			_ = manager.HasConnection("dynamic")
+			_ = manager.DefaultConnectionName()
+		}
+	}()
 
-	<-done
+	// Another writer: add with createNow
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iterations; i++ {
+			_ = manager.AddConnection(ConnectionConfig{Name: "dynamic2", Region: "eu-west-1"}, true)
+			_ = manager.RemoveConnection("dynamic2")
+		}
+	}()
+
+	wg.Wait()
 }
 
 func TestMultiConfig_addOrReplace(t *testing.T) {
