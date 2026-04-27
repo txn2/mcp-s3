@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <!-- canvas -->
+  <rect width="1200" height="630" fill="#0B0B09"/>
+
+  <!-- warm tint wash -->
+  <defs>
+    <radialGradient id="tint" cx="14%" cy="6%" r="55%">
+      <stop offset="0%" stop-color="#FF5A1F" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#FF5A1F" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" x="0" y="0" width="60" height="60" patternUnits="userSpaceOnUse">
+      <path d="M 60 0 L 0 0 0 60" fill="none" stroke="#ECE3CE" stroke-opacity="0.04" stroke-width="1"/>
+    </pattern>
+    <linearGradient id="vignette" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#0B0B09" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#0B0B09" stop-opacity="0.55"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#tint)"/>
+  <rect width="1200" height="630" fill="url(#grid)"/>
+
+  <!-- crosshair corners -->
+  <g stroke="#5A554B" stroke-width="1">
+    <!-- top-left -->
+    <line x1="40" y1="56" x2="68" y2="56"/>
+    <line x1="54" y1="42" x2="54" y2="70"/>
+    <!-- top-right -->
+    <line x1="1132" y1="56" x2="1160" y2="56"/>
+    <line x1="1146" y1="42" x2="1146" y2="70"/>
+    <!-- bottom-left -->
+    <line x1="40" y1="574" x2="68" y2="574"/>
+    <line x1="54" y1="560" x2="54" y2="588"/>
+    <!-- bottom-right -->
+    <line x1="1132" y1="574" x2="1160" y2="574"/>
+    <line x1="1146" y1="560" x2="1146" y2="588"/>
+  </g>
+
+  <!-- top rail strip -->
+  <line x1="80" y1="100" x2="1120" y2="100" stroke="#2A2922" stroke-width="1"/>
+  <text x="80" y="80" fill="#ECE3CE" font-family="Fraunces, Georgia, serif" font-style="italic" font-weight="400" font-size="22">mcp-s3</text>
+  <text x="170" y="80" fill="#968F80" font-family="JetBrains Mono, Menlo, monospace" font-size="13" letter-spacing="0.6">· mcp server for amazon s3</text>
+  <text x="1120" y="80" fill="#FF5A1F" font-family="JetBrains Mono, Menlo, monospace" font-size="12" font-weight="700" letter-spacing="2.4" text-anchor="end">TXN2 / OPEN SOURCE</text>
+
+  <!-- symbol mark, signal accent breathing-frozen -->
+  <svg x="92" y="180" width="280" height="280" viewBox="10 10 80 80" overflow="visible">
+    <path fill="#ECE3CE" d="M10,23.333C10,30.695 15.972,36.666 23.333,36.666C30.696,36.666 36.665,42.635 36.665,49.999C36.665,57.361 30.697,63.332 23.333,63.332C15.969,63.332 10,69.305 10,76.667C10,84.03 15.97,90 23.333,90C30.696,90 36.666,84.025 36.666,76.667C36.666,54.58 54.573,36.667 76.666,36.665C84.029,36.665 90,30.695 90,23.332C90,15.973 84.029,10 76.667,10C69.305,10 63.333,15.973 63.333,23.335C63.333,30.698 57.363,36.667 50,36.667C42.637,36.667 36.667,30.698 36.667,23.334C36.667,15.972 30.697,10.001 23.333,10.001C15.972,10 10,15.97 10,23.333Z"/>
+    <path fill="#FF5A1F" d="M46.666,68.334C46.667,80.3 56.363,90 68.333,90C80.303,90 90,80.3 90,68.333C90,56.359 80.303,46.667 68.333,46.667C56.363,46.667 46.666,56.361 46.666,68.334Z"/>
+  </svg>
+
+  <!-- typographic display, three rows -->
+  <text x="420" y="270" fill="#ECE3CE" font-family="Fraunces, Georgia, serif" font-style="italic" font-weight="300" font-size="120" letter-spacing="-3">mcp-s3</text>
+
+  <!-- outline row -->
+  <text x="420" y="380" fill="none" stroke="#ECE3CE" stroke-width="1.4" font-family="Fraunces, Georgia, serif" font-weight="400" font-size="90" letter-spacing="-2">object storage</text>
+
+  <text x="420" y="475" fill="#ECE3CE" font-family="Fraunces, Georgia, serif" font-style="italic" font-weight="300" font-size="78" letter-spacing="-2">for ai.</text>
+
+  <!-- bottom strip -->
+  <line x1="80" y1="538" x2="1120" y2="538" stroke="#2A2922" stroke-width="1"/>
+
+  <!-- bottom-left registration tick + capsule -->
+  <line x1="80" y1="560" x2="80" y2="590" stroke="#FF5A1F" stroke-width="2"/>
+  <text x="100" y="582" fill="#C9C0AB" font-family="JetBrains Mono, Menlo, monospace" font-size="13" letter-spacing="1.8">APACHE 2.0  ·  COMPOSABLE MCP SERVER  ·  GO  ·  READ-ONLY BY DEFAULT</text>
+
+  <!-- bottom-right URL -->
+  <text x="1120" y="582" fill="#FF5A1F" font-family="JetBrains Mono, Menlo, monospace" font-size="14" font-weight="700" letter-spacing="2.2" text-anchor="end">MCP-S3.TXN2.COM  ↗</text>
+</svg>
