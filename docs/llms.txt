@@ -1,0 +1,56 @@
+# mcp-s3
+
+> Composable MCP server for Amazon S3 and S3-compatible object storage. Read-only by default with size caps and prefix ACLs. Imports as a Go library to compose custom MCP servers with auth, tenant isolation, and audit logging.
+
+mcp-s3 is a Model Context Protocol server that gives AI assistants safe, structured access to Amazon S3 and any S3-compatible store (SeaweedFS, LocalStack, MinIO). List buckets, browse objects with prefix and delimiter, read content, write under guard rails, copy across buckets, and mint presigned URLs. The standalone server works out of the box; the Go library lets you build custom MCP servers with middleware, interceptors, and transformers without forking.
+
+## MCP Server
+
+- [Server Overview](https://mcp-s3.txn2.com/server/): How the standalone server works
+- [Installation](https://mcp-s3.txn2.com/server/installation/): Install and connect to AI clients (Claude Code, Claude Desktop, Cursor)
+- [Configuration](https://mcp-s3.txn2.com/server/configuration/): Environment variables, AWS credentials, S3-compatible endpoints
+- [Tools Reference](https://mcp-s3.txn2.com/server/tools/): Complete MCP tool descriptions and schemas
+- [Multi-Server Setup](https://mcp-s3.txn2.com/server/multi-server/): Connect to multiple S3 accounts from one install
+
+## Go Library
+
+- [Library Overview](https://mcp-s3.txn2.com/library/): Compose custom MCP servers from mcp-s3 packages
+- [Quick Start](https://mcp-s3.txn2.com/library/quickstart/): Library usage in five minutes
+- [Architecture](https://mcp-s3.txn2.com/library/architecture/): Toolkit, client, and extensions layout
+- [Extensibility](https://mcp-s3.txn2.com/library/extensibility/): Middleware, interceptors, and transformers
+
+## Reference
+
+- [Tools API](https://mcp-s3.txn2.com/reference/tools-api/): Detailed tool schemas and contracts
+- [Configuration Reference](https://mcp-s3.txn2.com/reference/configuration/): All environment variables and structured options
+- [Security](https://mcp-s3.txn2.com/reference/security/): Read-only mode, size limits, prefix ACLs, audit logging
+
+## Key Capabilities
+
+- Read-only by default. Write, delete, and copy operations are blocked unless explicitly enabled.
+- Size caps: 10MB GET and 100MB PUT defaults to prevent unbounded transfers.
+- Multi-account: configure several S3 connections via S3_ADDITIONAL_CONNECTIONS JSON.
+- S3-compatible: works with AWS S3, SeaweedFS, LocalStack, and MinIO via S3_ENDPOINT.
+- Composable Go library: middleware wraps tool execution; interceptors gate or rewrite requests; transformers redact or audit results.
+- Stdio transport: ships as a standard MCP wire-protocol binary, no daemon, no HTTP server.
+
+## Quick Start
+
+```bash
+# Install
+go install github.com/txn2/mcp-s3/cmd/mcp-s3@latest
+
+# Wire to Claude Code
+claude mcp add s3 \
+  -e AWS_ACCESS_KEY_ID=$KEY \
+  -e AWS_SECRET_ACCESS_KEY=$SECRET \
+  -e AWS_REGION=us-east-1 \
+  -- mcp-s3
+```
+
+## Optional
+
+- [Troubleshooting](https://mcp-s3.txn2.com/support/troubleshooting/): Common issues and fixes
+- [Changelog](https://mcp-s3.txn2.com/support/changelog/): Release history
+- [GitHub Repository](https://github.com/txn2/mcp-s3): Source code, issues, and releases
+- [Ecosystem](https://mcp-s3.txn2.com/ecosystem/): Sister MCP projects (mcp-trino, mcp-datahub, mcp-data-platform)

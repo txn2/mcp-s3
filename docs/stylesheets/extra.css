@@ -397,17 +397,62 @@ a.rail__brand:focus-visible { outline-offset: 4px; }
   border-right: 1px solid var(--signal);
   padding-right: 14px;
   animation: rise 1.1s .1s both ease-out;
+  z-index: 2;
 }
 .page--home .hero__stamp__line { line-height: 1.7; }
 .page--home .hero__stamp__line--ok { color: var(--signal); }
 
+/* Hero main: symbol mark on the left, typographic display on the right.
+   The symbol is a large unboxed glyph that visually anchors the hero.
+   The accent path (orange circle) pulses on a slow breath. */
+.page--home .hero__main {
+  display: flex;
+  align-items: center;
+  gap: clamp(24px, 4vw, 64px);
+  margin-bottom: 56px;
+  animation: rise 1.1s .15s both ease-out;
+}
+.page--home .hero__mark {
+  display: block;
+  width: clamp(144px, 20vw, 288px);
+  height: clamp(144px, 20vw, 288px);
+  flex: 0 0 auto;
+  text-decoration: none;
+  transition: transform .45s ease;
+}
+.page--home .hero__mark:hover { transform: rotate(-8deg) scale(1.03); }
+.page--home .hero__mark:focus-visible { outline-offset: 6px; }
+.page--home .hero__mark__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.page--home .hero__mark__path--base   { fill: var(--paper); }
+.page--home .hero__mark__path--accent {
+  fill: var(--signal);
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  animation: mark-breath 6s ease-in-out infinite;
+}
+.page--home .hero__mark:hover .hero__mark__path--accent {
+  animation-duration: 2.2s;
+}
+
+@keyframes mark-breath {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.08); }
+}
+
 .page--home .hero__display {
+  flex: 1 1 auto;
+  min-width: 0;
   font-family: var(--serif);
   font-weight: 300;
-  font-size: clamp(60px, 12.5vw, 220px);
-  line-height: 0.92;
-  letter-spacing: -0.04em;
-  margin-bottom: 56px;
+  font-size: clamp(44px, 8vw, 140px);
+  line-height: 0.95;
+  letter-spacing: -0.035em;
+  margin: 0;
   font-variation-settings: "opsz" 144;
 }
 .page--home .hero__row {
@@ -415,14 +460,8 @@ a.rail__brand:focus-visible { outline-offset: 4px; }
   flex-wrap: wrap;
 }
 .page--home .hero__row--1 { animation: rise 1.1s .25s both ease-out; }
-.page--home .hero__row--2 {
-  padding-left: clamp(40px, 14vw, 240px);
-  animation: rise 1.1s .4s both ease-out;
-}
-.page--home .hero__row--3 {
-  padding-left: clamp(20px, 6vw, 100px);
-  animation: rise 1.1s .55s both ease-out;
-}
+.page--home .hero__row--2 { animation: rise 1.1s .4s both ease-out; }
+.page--home .hero__row--3 { animation: rise 1.1s .55s both ease-out; }
 .page--home .hero__row em.serif {
   font-style: italic;
   color: var(--paper);
@@ -492,6 +531,15 @@ a.rail__brand:focus-visible { outline-offset: 4px; }
   font-variation-settings: "opsz" 144;
 }
 
+@media (max-width: 880px) {
+  .page--home .hero__main {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 28px;
+  }
+  .page--home .hero__mark { width: clamp(108px, 25vw, 180px); height: clamp(108px, 25vw, 180px); }
+}
+
 @media (max-width: 760px) {
   .page--home .hero__stamp {
     position: static; text-align: left;
@@ -501,7 +549,6 @@ a.rail__brand:focus-visible { outline-offset: 4px; }
     margin-bottom: 36px;
   }
   .page--home .hero__intro { grid-template-columns: 1fr; padding-left: 0; }
-  .page--home .hero__row--2, .page--home .hero__row--3 { padding-left: 0; }
   .page--home .hero__chip { display: none; }
 }
 
@@ -1546,4 +1593,5 @@ a.md-header__button.md-logo:hover ~ .md-header__title .md-header__topic,
   }
   .ticker__track { animation: none; }
   .rail__mark { animation: none; }
+  .hero__mark__path--accent { animation: none; }
 }

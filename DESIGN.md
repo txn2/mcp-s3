@@ -47,7 +47,10 @@ mcp-s3 runs at **level 2**, matching its sister projects kubefwd and txeh. The s
 |------|------|
 | `mkdocs.yml`                   | Single dark `slate` palette. `font: false` so CSS loads the upstream Google Fonts URL with trimmed axes. |
 | `docs/index.md`                | Stub front matter with `template: home.html`. All homepage HTML lives in the template. |
-| `docs/overrides/main.html`     | Adds the upstream Google Fonts `<link>` plus OG and Twitter meta. Inherited by every page. |
+| `docs/overrides/main.html`     | Adds the upstream Google Fonts `<link>`, full SEO surface (OG, Twitter, JSON-LD `SoftwareApplication`), and the canonical/author meta tags per the upstream "SEO and social cards" spec. Inherited by every page. |
+| `docs/images/mcp-s3-og.svg`    | Source for the 1200x630 social card. Edit this, then re-rasterise. |
+| `docs/images/mcp-s3-og.png`    | Rendered OG card. Linked from `og:image` and `twitter:image`. Re-render with `rsvg-convert -w 1200 -h 630 -o docs/images/mcp-s3-og.png docs/images/mcp-s3-og.svg`. |
+| `docs/llms.txt`                | LLM-friendly docs map per the upstream `llms.txt` spec. Update when new top-level docs pages ship. |
 | `docs/overrides/home.html`     | Custom homepage template. Overrides `block header` (rail), `block tabs` (empty), `block container` (page--home shell with hero, sections, flagship cards, stack, coda), `block footer` (home-footer). |
 | `docs/overrides/404.html`      | Restyled not-found page. Inherits `main.html`, uses `.md-typeset` body so the rail and footer match. |
 | `docs/stylesheets/extra.css`   | All design rules. Two halves: homepage components scoped under `.page--home`, and Material chrome restyle for inner pages via `[data-md-color-scheme="slate"]` variable overrides. |
@@ -57,7 +60,8 @@ mcp-s3 runs at **level 2**, matching its sister projects kubefwd and txeh. The s
 Components ported from upstream verbatim, with mcp-s3 content:
 
 - `.rail` (replaces Material `.md-header` on the homepage). Brand links to `./`. Live UTC clock in meta. txn2.com link in meta as `part of <em class="serif">txn2</em> ↗`.
-- `.hero` with three Fraunces rows (mcp-s3 / object storage / for ai.).
+- `.hero__main` (project-site hero variant): square symbol on the left, three-row Fraunces display on the right. mcp-s3 / object storage / for ai. See upstream `.hero__main` and `.hero__mark` component spec.
+- `.hero__mark` linking to `https://github.com/txn2/mcp-s3`. Symbol file at `docs/images/mcp-s3-symbol.svg` (square, viewBox `10 10 80 80`, two paths: paper-toned interconnected nodes plus a signal-orange circle). Accent breathes per upstream spec.
 - `.section`, `.section__index`, `.section__title`.
 - `.flagship__card`. Two cards: a server card (standalone MCP install + connect demo) and a library card (Go composition with `client.New`, `tools.NewToolkit`). Top accent line animates on hover per upstream spec.
 - `.terminal`, `.terminal__bar`, `.terminal__body` with `.t-prompt`, `.t-ok`, `.t-mute` classes. The only block with shadow.
@@ -71,9 +75,10 @@ Components from upstream **not used** here, with reason:
 
 Custom additions specific to mcp-s3:
 
+- mcp-s3 was the first sister project to adopt the canonical `.hero__main` + `.hero__mark` pattern from upstream. The symbol was extracted from the historical `MCP-S3-banner-*.svg` lockup; only the geometric mark (paper linework + signal-orange circle) carried over. Sister projects (kubefwd, txeh, mcp-trino, mcp-datahub, mcp-data-platform) should follow the same extraction pattern: ship a square `PROJECT-symbol.svg` with two paths.
 - `home-footer__col--meta` includes a `txn2 / org` panel that backlinks to txn2.com explicitly. Per the org-wide rule that every sister project must clearly link home.
 - The server flagship card's terminal demo uses real `claude mcp add` invocations. The library card shows the canonical `client.New` / `tools.NewToolkit` / `RegisterTools` path.
-- An `ecosystem` callout in the stack list points at the sister MCP projects (`mcp-data-platform`, `mcp-trino`, `mcp-datahub`) so readers see the broader composable suite.
+- An `ecosystem` callout in the stack list points at the sister MCP projects (`mcp-data-platform`, `mcp-trino`, `mcp-datahub`) so readers see the broader composable suite. Links go to each project's documentation site, not its GitHub repo.
 
 ## MkDocs Material learnings
 
