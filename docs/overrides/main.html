@@ -1,21 +1,39 @@
 {% extends "base.html" %}
 
 {% block extrahead %}
-  <!-- Open Graph -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Instrument+Sans:wght@400..700&family=JetBrains+Mono:wght@400..700&display=swap">
+
   <meta property="og:type" content="website">
-  <meta property="og:title" content="{{ page.title }} - mcp-s3">
+  <meta property="og:url" content="{{ config.site_url }}">
+  <meta property="og:title" content="{{ config.site_name }} / MCP server for Amazon S3 and S3-compatible storage">
   <meta property="og:description" content="{{ config.site_description }}">
-  <meta property="og:url" content="{{ page.canonical_url }}">
-  <meta property="og:site_name" content="{{ config.site_name }}">
   <meta property="og:image" content="{{ config.site_url }}images/logo.png">
 
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="{{ page.title }} - mcp-s3">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="{{ config.site_url }}">
+  <meta name="twitter:title" content="{{ config.site_name }} / MCP server for Amazon S3 and S3-compatible storage">
   <meta name="twitter:description" content="{{ config.site_description }}">
   <meta name="twitter:image" content="{{ config.site_url }}images/logo.png">
+  <meta name="twitter:creator" content="@cjimti">
 
-  <!-- Additional meta -->
-  <meta name="author" content="{{ config.site_author }}">
   <link rel="canonical" href="{{ page.canonical_url }}">
+  <meta name="author" content="{{ config.site_author }}">
+{% endblock %}
+
+{# Inner-page skip-to-content. The homepage template overrides block header
+   wholesale and includes its own skiplink targeting #main. #}
+{% block header %}
+<a class="skiplink" href="#main">skip to content</a>
+{{ super() }}
+{% endblock %}
+
+{# Inner-page skip target. Material's <main data-md-component="main"> has no
+   id, so we drop a focusable anchor at the top of the content area. The
+   homepage template overrides block container wholesale and sets id="main"
+   on its own <main> element. #}
+{% block content %}
+<a id="main" tabindex="-1" class="skiplink-target" aria-hidden="true"></a>
+{{ super() }}
 {% endblock %}

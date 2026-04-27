@@ -1,36 +1,41 @@
 site_name: txn2/mcp-s3
 site_url: https://mcp-s3.txn2.com
-site_description: The composable MCP server for Amazon S3 and S3-compatible storage
+site_description: Composable MCP server for Amazon S3 and S3-compatible object storage
 site_author: Craig Johnston
 repo_url: https://github.com/txn2/mcp-s3
 repo_name: txn2/mcp-s3
 edit_uri: edit/main/docs/
+
+copyright: Copyright &copy; 2025 - 2026 Craig Johnston / Deasil Works, Inc.
 
 theme:
   name: material
   custom_dir: docs/overrides
   logo: images/logo.png
   favicon: images/logo.png
-  font:
-    text: Inter
-    code: JetBrains Mono
   palette:
-    - media: "(prefers-color-scheme: light)"
-      scheme: default
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-    - media: "(prefers-color-scheme: dark)"
-      scheme: slate
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
+    scheme: slate
+  font: false
+  icon:
+    repo: fontawesome/brands/github
   features:
     - navigation.instant
+    - navigation.instant.progress
+    - navigation.tracking
     - navigation.tabs
+    - navigation.tabs.sticky
     - navigation.sections
+    - navigation.top
+    - navigation.footer
     - search.suggest
+    - search.highlight
+    - search.share
     - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - content.action.edit
+    - toc.follow
+    - announce.dismiss
 
 nav:
   - Home: index.md
@@ -55,6 +60,16 @@ nav:
     - Troubleshooting: support/troubleshooting.md
     - Changelog: support/changelog.md
 
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/txn2/mcp-s3
+      name: mcp-s3 on GitHub
+  generator: false
+
+extra_css:
+  - stylesheets/extra.css
+
 markdown_extensions:
   - abbr
   - admonition
@@ -66,17 +81,25 @@ markdown_extensions:
   - toc:
       permalink: true
       toc_depth: 3
-  - pymdownx.arithmatex
-  - pymdownx.betterem
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
   - pymdownx.caret
   - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - pymdownx.highlight:
       anchor_linenums: true
       line_spans: __span
       pygments_lang_class: true
   - pymdownx.inlinehilite
   - pymdownx.keys
-  - pymdownx.magiclink
+  - pymdownx.magiclink:
+      repo_url_shorthand: true
+      user: txn2
+      repo: mcp-s3
   - pymdownx.mark
   - pymdownx.smartsymbols
   - pymdownx.superfences:
@@ -89,19 +112,7 @@ markdown_extensions:
   - pymdownx.tasklist:
       custom_checkbox: true
   - pymdownx.tilde
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
 
 plugins:
   - search:
-      separator: '[\s\-,:!=\[\]()"/]+|(?!\b)(?=[A-Z][a-z])|\.(?!\d)|&[lg]t;'
-
-extra:
-  social:
-    - icon: fontawesome/brands/github
-      link: https://github.com/txn2/mcp-s3
-  generator: false
-
-extra_css:
-  - stylesheets/extra.css
+      separator: '[\s\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
