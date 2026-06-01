@@ -7,6 +7,7 @@ import (
 	"time"
 
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
@@ -96,6 +97,23 @@ func (m *mockPresignAPI) PresignPutObject(ctx context.Context, params *s3.PutObj
 		URL:    "https://example.com/presigned",
 		Method: "PUT",
 	}, nil
+}
+
+// mockUploader is a mock implementation of ObjectUploader for testing the
+// streaming upload path.
+type mockUploader struct {
+	uploadObjectFunc func(
+		ctx context.Context, input *transfermanager.UploadObjectInput, opts ...func(*transfermanager.Options),
+	) (*transfermanager.UploadObjectOutput, error)
+}
+
+func (m *mockUploader) UploadObject(
+	ctx context.Context, input *transfermanager.UploadObjectInput, opts ...func(*transfermanager.Options),
+) (*transfermanager.UploadObjectOutput, error) {
+	if m.uploadObjectFunc != nil {
+		return m.uploadObjectFunc(ctx, input, opts...)
+	}
+	return &transfermanager.UploadObjectOutput{}, nil
 }
 
 // newMockClient creates a Client with mock S3 and presign APIs for testing.

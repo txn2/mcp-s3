@@ -226,6 +226,38 @@ func main() {
 }
 ```
 
+### Streaming uploads
+
+`PutObject` buffers the whole body in memory. For large or unbounded sources
+(query exports, log streams), use `PutObjectStream`, which uploads from an
+`io.Reader` via the AWS SDK transfer manager without buffering the full payload:
+
+```go
+out, err := s3Client.PutObjectStream(ctx, &client.PutObjectStreamInput{
+    Bucket:      "my-bucket",
+    Key:         "exports/large.csv",
+    Body:        reader, // any io.Reader
+    ContentType: "text/csv",
+    MaxBytes:    500 * 1024 * 1024, // optional: abort past this many bytes
+})
+if err != nil {
+    if errors.Is(err, client.ErrStreamTooLarge) {
+        // stream exceeded MaxBytes and was aborted
+    }
+    log.Fatal(err)
+}
+log.Printf("uploaded, etag=%s", out.ETag)
+```
+
+Notes:
+
+- The per-operation timeout (`S3_TIMEOUT`) is **not** applied to streaming
+  uploads, since they can legitimately run much longer than a normal request.
+  Control the deadline through the supplied `context.Context`.
+- `MaxBytes` bounds the stream at the library level. The read-only and
+  size-limit MCP extensions guard the tool layer, not direct library calls;
+  `PutObjectStream` is currently a library-only capability (no MCP tool).
+
 ### Extensibility Patterns
 
 **Middleware** wraps tool execution for cross-cutting concerns:
