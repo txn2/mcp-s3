@@ -4,6 +4,7 @@ import (
 	"context"
 
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
@@ -25,8 +26,18 @@ type PresignAPI interface {
 	PresignPutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
 }
 
+// ObjectUploader abstracts a streaming/multipart upload. It is satisfied by
+// *transfermanager.Client from the AWS SDK and is defined here, at the consumer,
+// so the streaming path can be mocked in unit tests.
+type ObjectUploader interface {
+	UploadObject(
+		ctx context.Context, input *transfermanager.UploadObjectInput, opts ...func(*transfermanager.Options),
+	) (*transfermanager.UploadObjectOutput, error)
+}
+
 // Compile-time interface checks.
 var (
-	_ S3API      = (*s3.Client)(nil)
-	_ PresignAPI = (*s3.PresignClient)(nil)
+	_ S3API          = (*s3.Client)(nil)
+	_ PresignAPI     = (*s3.PresignClient)(nil)
+	_ ObjectUploader = (*transfermanager.Client)(nil)
 )

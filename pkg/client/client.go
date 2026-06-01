@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
@@ -19,6 +20,7 @@ import (
 type Client struct {
 	s3Client       S3API
 	presignClient  PresignAPI
+	uploader       ObjectUploader
 	config         *Config
 	connectionName string
 }
@@ -186,9 +188,14 @@ func New(ctx context.Context, cfg *Config) (*Client, error) {
 	// Create presign client
 	presignClient := s3.NewPresignClient(s3Client)
 
+	// Create the streaming/multipart uploader. It shares the same underlying
+	// S3 client so it honors the configured endpoint, credentials, and region.
+	uploader := transfermanager.New(s3Client)
+
 	return &Client{
 		s3Client:       s3Client,
 		presignClient:  presignClient,
+		uploader:       uploader,
 		config:         cfg.Clone(),
 		connectionName: cfg.Name,
 	}, nil
