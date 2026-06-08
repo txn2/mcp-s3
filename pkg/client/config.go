@@ -22,6 +22,13 @@ type Config struct {
 	// Endpoint is an optional custom endpoint URL for S3-compatible services (SeaweedFS, LocalStack, etc.).
 	Endpoint string
 
+	// PresignEndpoint is an optional public-facing endpoint used only when
+	// signing presigned URLs. When set, presigned URLs are signed against it so
+	// they are reachable from outside the cluster, while data operations keep
+	// using Endpoint (typically an internal/cluster address). Empty falls back
+	// to Endpoint, preserving prior behavior.
+	PresignEndpoint string
+
 	// AccessKeyID is the AWS access key ID. If empty, the SDK credential chain is used.
 	AccessKeyID string
 
@@ -57,6 +64,7 @@ type Config struct {
 //   - AWS_SESSION_TOKEN: Session token (optional)
 //   - AWS_PROFILE: Profile name (optional)
 //   - S3_ENDPOINT: Custom endpoint URL (optional)
+//   - S3_PRESIGN_ENDPOINT: Public endpoint for presigned URLs (optional)
 //   - S3_USE_PATH_STYLE: Use path-style URLs (default: false)
 //   - S3_TIMEOUT: Operation timeout (default: 30s)
 //   - S3_CONNECTION_NAME: Connection name (optional)
@@ -65,6 +73,7 @@ func FromEnv() Config {
 	cfg := Config{
 		Region:          getEnvOrDefault("AWS_REGION", DefaultRegion),
 		Endpoint:        getEnvSanitized("S3_ENDPOINT"),
+		PresignEndpoint: getEnvSanitized("S3_PRESIGN_ENDPOINT"),
 		AccessKeyID:     getEnvSanitized("AWS_ACCESS_KEY_ID"),
 		SecretAccessKey: getEnvSanitized("AWS_SECRET_ACCESS_KEY"),
 		SessionToken:    getEnvSanitized("AWS_SESSION_TOKEN"),
@@ -107,6 +116,7 @@ func (c *Config) Clone() *Config {
 	return &Config{
 		Region:          c.Region,
 		Endpoint:        c.Endpoint,
+		PresignEndpoint: c.PresignEndpoint,
 		AccessKeyID:     c.AccessKeyID,
 		SecretAccessKey: c.SecretAccessKey,
 		SessionToken:    c.SessionToken,
