@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	neturl "net/url"
 	"os"
 	"strings"
 	"testing"
@@ -716,6 +717,59 @@ func TestClient_PresignGetURL(t *testing.T) {
 		_, err := client.PresignGetURL(context.Background(), "bucket", "key", time.Hour)
 		if err == nil {
 			t.Fatal("expected error, got nil")
+		}
+	})
+}
+
+// TestNew_PresignEndpoint verifies that a configured PresignEndpoint signs
+// presigned URLs against the public endpoint while data operations keep using
+// Endpoint, and that an empty PresignEndpoint falls back to Endpoint. Presigning
+// is a local operation (no network), so a real client built via New is used.
+func TestNew_PresignEndpoint(t *testing.T) {
+	ctx := context.Background()
+
+	cfgWith := func(presign string) *Config {
+		return &Config{
+			Region:          "us-east-1",
+			Endpoint:        "http://internal:8333",
+			PresignEndpoint: presign,
+			AccessKeyID:     "test",
+			SecretAccessKey: "secret",
+			UsePathStyle:    true,
+		}
+	}
+	presignHost := func(t *testing.T, c *Client) (scheme, host string) {
+		t.Helper()
+		got, err := c.PresignGetURL(ctx, "my-bucket", "file.txt", time.Hour)
+		if err != nil {
+			t.Fatalf("PresignGetURL: %v", err)
+		}
+		u, err := neturl.Parse(got.URL)
+		if err != nil {
+			t.Fatalf("parse %q: %v", got.URL, err)
+		}
+		return u.Scheme, u.Host
+	}
+
+	t.Run("signs against the public presign endpoint", func(t *testing.T) {
+		c, err := New(ctx, cfgWith("https://s3.public.example.com"))
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		scheme, host := presignHost(t, c)
+		if scheme != "https" || host != "s3.public.example.com" {
+			t.Errorf("presigned URL = %s://%s, want https://s3.public.example.com", scheme, host)
+		}
+	})
+
+	t.Run("empty presign endpoint falls back to the data endpoint", func(t *testing.T) {
+		c, err := New(ctx, cfgWith(""))
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		_, host := presignHost(t, c)
+		if host != "internal:8333" {
+			t.Errorf("presigned URL host = %s, want internal:8333", host)
 		}
 	})
 }

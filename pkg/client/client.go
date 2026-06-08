@@ -185,8 +185,19 @@ func New(ctx context.Context, cfg *Config) (*Client, error) {
 	// Create S3 client
 	s3Client := s3.NewFromConfig(awsCfg, s3Opts...)
 
-	// Create presign client
-	presignClient := s3.NewPresignClient(s3Client)
+	// Create presign client. When a dedicated presign endpoint is configured,
+	// sign URLs against a client pointed at that public-facing endpoint so the
+	// URLs are reachable outside the cluster; data operations keep using
+	// s3Client (the internal Endpoint). With no presign endpoint the two are the
+	// same client, preserving prior behavior.
+	presignSource := s3Client
+	if cfg.PresignEndpoint != "" {
+		presignSource = s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+			o.BaseEndpoint = aws.String(cfg.PresignEndpoint)
+			o.UsePathStyle = cfg.UsePathStyle
+		})
+	}
+	presignClient := s3.NewPresignClient(presignSource)
 
 	// Create the streaming/multipart uploader. It shares the same underlying
 	// S3 client so it honors the configured endpoint, credentials, and region.
