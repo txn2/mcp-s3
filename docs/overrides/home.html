@@ -15,15 +15,13 @@
 <header class="rail" data-md-component="header">
   <a class="skiplink" href="#main">skip to content</a>
   <a href="./" class="rail__brand" aria-label="mcp-s3 home">
-    <span class="rail__mark" aria-hidden="true">◐</span>
+    <span class="rail__mark" aria-hidden="true"><svg viewBox="10 10 80 80" xmlns="http://www.w3.org/2000/svg"><path class="rail__mark__ring" d="M10,23.333C10,30.695 15.972,36.666 23.333,36.666C30.696,36.666 36.665,42.635 36.665,49.999C36.665,57.361 30.697,63.332 23.333,63.332C15.969,63.332 10,69.305 10,76.667C10,84.03 15.97,90 23.333,90C30.696,90 36.666,84.025 36.666,76.667C36.666,54.58 54.573,36.667 76.666,36.665C84.029,36.665 90,30.695 90,23.332C90,15.973 84.029,10 76.667,10C69.305,10 63.333,15.973 63.333,23.335C63.333,30.698 57.363,36.667 50,36.667C42.637,36.667 36.667,30.698 36.667,23.334C36.667,15.972 30.697,10.001 23.333,10.001C15.972,10 10,15.97 10,23.333Z"/><path class="rail__mark__sq" d="M46.666,68.334C46.667,80.3 56.363,90 68.333,90C80.303,90 90,80.3 90,68.333C90,56.359 80.303,46.667 68.333,46.667C56.363,46.667 46.666,56.361 46.666,68.334Z"/></svg></span>
     <span class="rail__name">mcp-s3</span>
     <span class="rail__sep" aria-hidden="true">·</span>
     <span class="rail__sub">mcp server for amazon s3</span>
   </a>
   <div class="rail__meta">
     <span class="rail__rel">v1.x</span>
-    <span class="rail__dot" aria-hidden="true">●</span>
-    <span data-clock>·· UTC</span>
     <span class="rail__dot" aria-hidden="true">●</span>
     <a href="https://txn2.com" class="rail__org">part of <em class="serif">txn2</em>&nbsp;↗</a>
   </div>
@@ -64,7 +62,7 @@
       <p class="hero__stamp__line">org / txn2</p>
       <p class="hero__stamp__line">est. 2025</p>
       <p class="hero__stamp__line"><a href="https://pkg.go.dev/github.com/txn2/mcp-s3">pkg.go.dev&nbsp;↗</a></p>
-      <p class="hero__stamp__line hero__stamp__line--ok">apache 2.0 · read-only by default</p>
+      <p class="hero__stamp__line hero__stamp__line--ok">apache 2.0</p>
     </div>
 
     <div class="hero__main">
@@ -78,7 +76,6 @@
       <h1 class="hero__display">
         <span class="hero__row hero__row--1">
           <em class="serif">mcp-s3</em>
-          <span class="hero__chip">mcp · go</span>
         </span>
         <span class="hero__row hero__row--2">
           <span class="outline">object storage</span>
@@ -91,7 +88,7 @@
 
     <div class="hero__intro">
       <p class="hero__lede">
-        <span class="dropcap">m</span>cp-s3 is an MCP server that gives AI assistants safe, structured access to Amazon S3 and any S3-compatible store. List buckets, browse objects with prefix and delimiter, read content, write under guard rails, copy across buckets, and mint presigned URLs. <strong>Read-only by default</strong>, with size caps and prefix ACLs. Speaks to AWS S3, SeaweedFS, LocalStack, and anything else that talks the S3 wire protocol.
+        mcp-s3 is an MCP server that gives AI assistants safe, structured access to Amazon S3 and any S3-compatible store. List buckets, browse objects with prefix and delimiter, read content, write under guard rails, copy across buckets, and mint presigned URLs, with size caps and prefix ACLs. Speaks to AWS S3, SeaweedFS, LocalStack, and anything else that talks the S3 wire protocol.
       </p>
       <p class="hero__lede hero__lede--muted">
         Run it standalone, or import it as a Go library and compose your own MCP server with custom auth, tenant isolation, and audit logging through middleware, interceptors, and transformers. Multi-account out of the box. Apache 2.0, part of the <a href="https://mcp-data-platform.txn2.com">txn2 mcp data platform</a> alongside <a href="https://mcp-trino.txn2.com">mcp-trino</a> and <a href="https://mcp-datahub.txn2.com">mcp-datahub</a>.
@@ -104,7 +101,6 @@
           <span>list buckets &amp; objects</span><span>·</span>
           <span>read &amp; write under guard</span><span>·</span>
           <span>presigned urls</span><span>·</span>
-          <span>read-only by default</span><span>·</span>
           <span>size caps</span><span>·</span>
           <span>prefix acls</span><span>·</span>
           <span>multi-account</span><span>·</span>
@@ -116,7 +112,6 @@
           <span>list buckets &amp; objects</span><span>·</span>
           <span>read &amp; write under guard</span><span>·</span>
           <span>presigned urls</span><span>·</span>
-          <span>read-only by default</span><span>·</span>
           <span>size caps</span><span>·</span>
           <span>prefix acls</span><span>·</span>
           <span>multi-account</span><span>·</span>
@@ -228,71 +223,57 @@ kit.Use(authMiddleware)</pre>
       </p>
     </header>
 
-    <ol class="stack">
+    <ul class="stack">
       <li class="stack__row">
-        <span class="stack__num">001</span>
         <div class="stack__main">
           <a class="stack__name" href="server/tools/">list, read, browse</a>
           <p class="stack__desc"><code>s3_list_buckets</code>, <code>s3_list_objects</code> (prefix, delimiter, pagination), <code>s3_get_object</code>, <code>s3_get_object_metadata</code>. The read-side surface that is always safe to expose.</p>
         </div>
-        <span class="stack__tag">tools</span>
         <span class="stack__year" aria-hidden="true">↗</span>
       </li>
       <li class="stack__row">
-        <span class="stack__num">002</span>
         <div class="stack__main">
           <a class="stack__name" href="reference/security/">read-only by default</a>
           <p class="stack__desc"><code>MCP_S3_EXT_READONLY=true</code> is the default. <code>s3_put_object</code>, <code>s3_delete_object</code>, and <code>s3_copy_object</code> are blocked unless explicitly enabled. Size caps via <code>MCP_S3_MAX_GET_SIZE</code> and <code>MCP_S3_MAX_PUT_SIZE</code>.</p>
         </div>
-        <span class="stack__tag">safety</span>
         <span class="stack__year" aria-hidden="true">↗</span>
       </li>
       <li class="stack__row">
-        <span class="stack__num">003</span>
         <div class="stack__main">
           <a class="stack__name" href="server/multi-server/">multi-account &amp; multi-cloud</a>
           <p class="stack__desc">Configure multiple connections via <code>S3_ADDITIONAL_CONNECTIONS</code>. Query production, staging, and a local SeaweedFS from the same MCP install. <code>s3_list_connections</code> lets the AI pick.</p>
         </div>
-        <span class="stack__tag">runtime</span>
         <span class="stack__year" aria-hidden="true">↗</span>
       </li>
       <li class="stack__row">
-        <span class="stack__num">004</span>
         <div class="stack__main">
           <a class="stack__name" href="server/tools/#s3_presign_url">presigned urls</a>
           <p class="stack__desc"><code>s3_presign_url</code> mints time-bound GET or PUT URLs the AI can hand to a user. Useful for downloads, third-party uploads, and any flow that needs to escape the MCP transport.</p>
         </div>
-        <span class="stack__tag">share</span>
         <span class="stack__year" aria-hidden="true">↗</span>
       </li>
       <li class="stack__row">
-        <span class="stack__num">005</span>
         <div class="stack__main">
           <a class="stack__name" href="library/extensibility/">middleware &amp; interceptors</a>
           <p class="stack__desc">Wrap tool execution with <code>Use</code> middleware. Block or rewrite requests with interceptors. Redact, audit, or transform results post-execution. Compose enterprise concerns without forking the toolkit.</p>
         </div>
-        <span class="stack__tag">compose</span>
         <span class="stack__year" aria-hidden="true">↗</span>
       </li>
       <li class="stack__row">
-        <span class="stack__num">006</span>
         <div class="stack__main">
           <a class="stack__name" href="server/configuration/">aws s3, seaweedfs, localstack</a>
           <p class="stack__desc">Built on AWS SDK v2. Set <code>S3_ENDPOINT</code> and <code>S3_USE_PATH_STYLE=true</code> to point at any S3-compatible service. Same tools, same contract, no per-provider branches in your prompts.</p>
         </div>
-        <span class="stack__tag">backends</span>
         <span class="stack__year" aria-hidden="true">↗</span>
       </li>
       <li class="stack__row stack__row--more">
-        <span class="stack__num">···</span>
         <div class="stack__main">
           <a class="stack__name" href="ecosystem/">part of the txn2 mcp data platform</a>
           <p class="stack__desc">Sister projects: <a href="https://mcp-trino.txn2.com">mcp-trino</a> for federated SQL, <a href="https://mcp-datahub.txn2.com">mcp-datahub</a> for metadata, <a href="https://mcp-data-platform.txn2.com">mcp-data-platform</a> as the catalog.</p>
         </div>
-        <span class="stack__tag">+ ecosystem</span>
         <span class="stack__year" aria-hidden="true">↗</span>
       </li>
-    </ol>
+    </ul>
   </section>
 
   {# CODA / sister projects, context #}
@@ -357,7 +338,7 @@ kit.Use(authMiddleware)</pre>
       <p class="home-footer__label">txn2 / org</p>
       <p class="home-footer__text"><a href="https://txn2.com">txn2.com&nbsp;↗</a><br>
       <span class="home-footer__links__sub">canonical home of the txn2 open source organization</span></p>
-      <p class="home-footer__mono">apache 2.0 license <span class="dot">·</span> <span data-clock>·· UTC</span></p>
+      <p class="home-footer__mono">apache 2.0 license</p>
     </div>
   </div>
   <div class="home-footer__base">
@@ -365,32 +346,4 @@ kit.Use(authMiddleware)</pre>
     <p class="home-footer__base__tag"><a href="https://txn2.com">design · txn2.com&nbsp;↗</a></p>
   </div>
 </footer>
-{% endblock %}
-
-{% block scripts %}
-{{ super() }}
-<script>
-  // Live UTC clock for rail/footer.
-  // Guarded against duplicate registration: Material's instant-nav rehydrates
-  // the body on every navigation back to the homepage; without this guard a
-  // fresh setInterval handle leaks each visit.
-  (function () {
-    if (window.__mcps3Clock) {
-      window.__mcps3Clock.tick();
-      return;
-    }
-    function tick() {
-      var now = new Date();
-      var hh = String(now.getUTCHours()).padStart(2, '0');
-      var mm = String(now.getUTCMinutes()).padStart(2, '0');
-      var stamp = hh + ':' + mm + ' UTC';
-      document.querySelectorAll('[data-clock]').forEach(function (el) {
-        el.textContent = stamp;
-      });
-    }
-    tick();
-    var handle = setInterval(tick, 30 * 1000);
-    window.__mcps3Clock = { tick: tick, handle: handle };
-  })();
-</script>
 {% endblock %}
