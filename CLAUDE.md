@@ -11,31 +11,87 @@ This file provides guidance to Claude Code when working with this project.
 - Generic: No domain-specific logic; suitable for any S3-compatible deployment
 - Secure: Read-only by default with configurable limits
 
+## CRITICAL - Factual Integrity (No Confabulation)
+
+AI-generated prose (PR descriptions, commit messages, reviews, explanations) is held to the same verification standard as code. Unverified claims are as unacceptable as untested code.
+
+1. **Never assert facts you haven't verified.** Before stating that a file contains X, a config is missing Y, or a system behaves in way Z — READ the file, CHECK the config, VERIFY the behavior. If you haven't looked, say "I haven't verified this" or say nothing.
+
+2. **Every claim must be evidence-linked.** PR descriptions, commit messages, and work summaries may only include claims that are either: (a) directly visible in the diff, or (b) verified by reading a specific file (cite file:line). No exceptions.
+
+3. **Never pad or embellish.** If you made two fixes, describe two fixes. Do not invent a third to make the work look more complete. Do not present hypotheses as confirmed diagnoses.
+
+4. **Uncertainty must be explicit.** Use "I believe," "possibly," or "I haven't verified" when uncertain. Never upgrade a guess to a fact.
+
+5. **When reviewing, verify claims against evidence.** Treat PR descriptions and commit messages as claims to be fact-checked, not trusted context.
+
+6. **Omission over fabrication.** A gap stated honestly is better than a fabricated answer stated confidently. When in doubt, leave it out.
+
+7. **Report a failing gate as a failure, in the first sentence.** A summary that lists the checks that passed and mentions the one that failed further down reads as a pass and is not one. If `make verify` exits non-zero, the report opens with that. Enumerating green sub-checks above a red overall result is a form of padding.
+
+## Development Workflow
+
+Work reaches the human in this order. The steps are not interchangeable, and none of them is optional.
+
+1. **Acceptance criteria first.** State the observable Given/When/Then before writing code.
+2. **Implement**, with tests that encode expected outputs.
+3. **Adversarial review.** Spawn a `general-purpose` sub-agent with the prompt in `~/.claude/hooks/review-prompt-template.md` — verbatim, and do not write the review yourself. Address every finding: fix it, dispute it in writing in the commit body, or defer it with a TODO. Re-spawn on the new tree. Stop at `Verdict: CLEAN` or when only comment polish remains. Iteration cap: 1 round for typical changes, 2 only if round 1 found a substantive bug. Write the verdict to `.claude/.last-review.md`.
+4. **`make verify`** — the LAST step, run on the exact tree being committed. It writes `.claude/.last-verify-passed`, which the pre-commit gate compares against the live diff. Verifying before the review means verifying a tree the review then changes.
+5. **Human review.** A human reads and approves every line, then the commit happens. Commits are performed by a human, not by Claude.
+
+Running `make verify` before the adversarial review inverts the order and wastes the run: any finding the review produces invalidates the sentinel it just wrote.
+
 ## Code Standards
 
 1. **Idiomatic Go**: All code must follow idiomatic Go patterns and conventions. Use `gofmt`, follow Effective Go guidelines, and adhere to Go Code Review Comments.
 
-2. **Test Coverage**: Project must maintain >80% unit test coverage. Build mocks where necessary to achieve this. Use table-driven tests where appropriate.
+2. **Test Coverage**: Project must maintain >=82% total unit test coverage (`COVERAGE_THRESHOLD` in the Makefile), and >=80% coverage of the lines a branch changes (`PATCH_COVERAGE_THRESHOLD`, mirroring the codecov patch check). Build mocks where necessary. Use table-driven tests where appropriate.
+   - A total-coverage gate cannot see new untested code when the rest of the tree carries the average. The patch gate is what actually holds new code to a standard.
 
-3. **Testing Definition**: When asked to "test" or "testing" the code, this means running the full CI test suite:
-   - Unit tests with race detection: `go test -race ./...`
-   - Linting: `golangci-lint run` + `go vet ./...`
-   - Security scanning: `gosec ./...` and `govulncheck ./...`
-   - Cyclomatic complexity: `gocyclo -over 15 .` (must have no output)
-   - All CI checks must pass locally before considering code "tested"
+3. **Testing Definition**: When asked to "test" or "testing" the code, this means running `make verify`, which executes the full CI-equivalent suite:
+   - **Tools-check (parity gate)** — verifies local `golangci-lint`, `gosec`, and `govulncheck` versions equal `GOLANGCI_LINT_VERSION`, `GOSEC_VERSION`, and `GOVULNCHECK_VERSION` in the Makefile. Those variables are the single source of truth: CI installs the same versions by reading them back with `make print-<VAR>`, rather than carrying hand-copied duplicates that drift. Drifting local tool versions are the most insidious parity gap: a local scanner that is newer than CI's can silently relax a rule CI's pinned build still enforces, so `make verify` goes green on a diff CI then rejects. `make verify` refuses to run until local matches CI. Override with `TOOLS_CHECK_STRICT=0` only with an explicit reason.
+   - Module tidy + verify (`go mod tidy`, `go mod verify`)
+   - Linting (`golangci-lint run` + `go vet ./...`) — cyclomatic complexity <=10, cognitive complexity <=15 in non-test code
+   - Unit tests with race detection and shuffling (`go test -race -shuffle=on -count=1 ./...`)
+   - Total coverage (hard gate, `COVERAGE_THRESHOLD`)
+   - Patch coverage — changed lines vs the merge base with main (hard gate, `PATCH_COVERAGE_THRESHOLD`)
+   - Security scanning (`gosec` + `govulncheck`, whose report is judged against `.govulncheck-allow.txt` by `scripts/govulncheck-gate.py`: an advisory with no patched release may be accepted with a written reason, and the gate fails when an accepted advisory gains a fix or stops being reported). CI runs this same `make security` target, so an accepted advisory cannot pass locally and fail in CI.
+   - Dead code analysis
+   - Build check (`go build ./...`)
+   - All checks must pass locally before considering code "tested"
 
-4. **Human Review Required**: A human must review and approve every line of code before it is committed. Therefore, commits are always performed by a human, not by Claude.
+   **Why govulncheck is gated rather than raw**: govulncheck exits 3 for "your code calls a vulnerable symbol" whether or not a fix exists, and has no way to accept a finding. Five Go standard-library advisories once held `make verify` red on `main` for long enough that the suite stopped being run at all. A gate that cannot be satisfied is a gate that gets ignored.
 
-5. **Go Report Card**: The project MUST always maintain 100% across all categories on [Go Report Card](https://goreportcard.com/). This includes:
+4. **CRITICAL - Coverage Verification Before Completion**: Before declaring ANY implementation task complete:
+   - Run `go test -coverprofile=coverage.out ./...` (note `./...`, not `./pkg/...` — covers `cmd/` too)
+   - For EVERY new function or method added, run `go tool cover -func=coverage.out | grep <function_name>`
+   - **If ANY new function shows less than 80% coverage (or 0.0%), you MUST add tests before declaring done**
+   - This is BLOCKING — do not report the work complete until all new code has adequate test coverage
+
+5. **CRITICAL - Integration Tests for Cross-Component Behavior**: Unit tests are NOT sufficient for behavior that only appears once components are assembled — MCP tool registration, middleware and interceptor chains, schema validation, context propagation. Before declaring such work complete:
+   - **Write a test that exercises the real assembled system.** For this project that means registering the toolkit on a real `mcp.Server`, connecting an in-memory client (`mcp.NewInMemoryTransports`), and calling the tool through `CallTool` — not calling the handler function directly.
+   - **A handler-level test proves the handler works. It does not prove the tool works.** The SDK validates arguments and structured output around the handler, so a handler can return a correct result that never reaches the client. Issue #141 was exactly this: every handler test passed while three tools returned a JSON-RPC error to real clients.
+   - Assert the failure paths through the same wiring, not only the success path.
+
+6. **Human Review Required**: A human must review and approve every line of code before it is committed. Therefore, commits are always performed by a human, not by Claude.
+
+7. **Go Report Card**: The project MUST always maintain 100% across all categories on [Go Report Card](https://goreportcard.com/). This includes:
    - **gofmt**: All code must be formatted with `gofmt`
    - **go vet**: No issues from `go vet`
-   - **gocyclo**: All functions must have cyclomatic complexity <=15
+   - **gocyclo**: All functions must have cyclomatic complexity <=10 (non-test code)
    - **golint**: No lint issues (deprecated but still checked)
    - **ineffassign**: No ineffectual assignments
    - **license**: Valid license file present
    - **misspell**: No spelling errors in comments/strings
 
-6. **Diagrams**: Use Mermaid for all diagrams. Never use ASCII art.
+8. **Diagrams**: Use Mermaid for all diagrams. Never use ASCII art.
+
+9. **Pinned Dependencies**: All external dependencies must be pinned for reproducibility and security:
+   - GitHub Actions: pinned by commit SHA with a trailing version comment
+   - Scanner versions (`golangci-lint`, `gosec`, `govulncheck`): pinned in the Makefile ONLY. CI reads each one back with `make print-<VAR>` rather than carrying a copy, and `make tools-check` holds local binaries to the same pins. Nothing enforces agreement between two hand-written copies, which is why there is only one.
+   - Go toolchain: pinned by the `toolchain` directive in `go.mod`, which CI reads via `go-version-file: go.mod`
+   - Go modules: pinned via `go.sum`
+   - **Actions published as a family must move together.** `github/codeql-action/{init,autobuild,analyze,upload-sarif}` reject a version mismatch between sub-actions in the same run. Dependabot opens one PR per sub-action and does not always open one for every member, so a rollup must check every reference, not only the ones with PRs.
 
 ## Architecture
 
@@ -148,17 +204,25 @@ Environment variables:
 
 ## Verification (AI-Verified Development)
 
-Run the full verification suite before every commit:
+Run the full verification suite as the LAST step before every commit, after the
+adversarial review (see Development Workflow above):
 ```
 make verify
 ```
 
+It writes `.claude/.last-verify-passed`, the short SHA-256 of the working-tree
+diff it passed against. The pre-commit gate compares that hash to the live diff,
+so a verify run only clears the tree it actually ran on. The hash computation
+must stay byte-identical to `compute_diff_hash()` in `~/.claude/hooks/review-gate.sh`.
+
 Individual checks (all must pass):
 ```
-make lint            # golangci-lint (24 linters) + go vet
+make tools-check     # Local tool versions == CI-pinned versions (runs first)
+make lint            # golangci-lint (25 linters) + go vet
 make test            # go test -race -shuffle=on ./...
-make coverage        # Coverage report (threshold: 80%)
-make security        # gosec + govulncheck
+make coverage        # Total coverage (threshold: 82%)
+make patch-coverage  # Coverage of changed lines vs main (threshold: 80%)
+make security        # gosec + govulncheck, gated by .govulncheck-allow.txt
 make deadcode        # deadcode (unreachable functions)
 make build-check     # go build + go mod verify
 ```
@@ -171,9 +235,14 @@ make profile         # Generate CPU and memory profiles for pprof
 
 ## Code Quality Thresholds
 
-- Test coverage: >=80%
-- Cyclomatic complexity: <=15 per function
+- Total test coverage: >=82%
+- Patch coverage (changed lines vs main): >=80%
+- Cyclomatic complexity: <=10 per function (non-test code)
+- Cognitive complexity: <=15 per function (non-test code)
 - Line length: <=140 characters
+
+Table-driven tests are exempt from both complexity limits: their branching lives
+in the case table, not in logic a reader has to hold.
 
 ## Go Code Standards (AI-Verified)
 
@@ -185,11 +254,27 @@ make profile         # Generate CPU and memory profiles for pprof
 6. **Dependencies**: Use `internal/` for code that shouldn't be imported. Minimize third-party dependencies.
 7. **Testing**: Table-driven tests. Property-based tests for pure functions.
 
-## AI-Specific Rules
+## AI Verification Requirements
 
-1. **No tautological tests**: tests must encode expected outputs, not reimplement logic
-2. **No hallucinated imports**: verify every dependency exists in the Go module ecosystem
-3. **Human review required**: all code requires human review before merge
-4. **Acceptance criteria first**: do not write code without Given/When/Then criteria
-5. **Explain non-obvious decisions**: comment WHY, not WHAT
-6. **No vaporware**: every package must be imported by non-test code
+When AI (Claude Code or similar) contributes code, these additional checks apply.
+
+1. **No Tautological Tests**: Tests must verify behavior, not struct field assignment. A test that sets `x.Field = "value"` then asserts `x.Field == "value"` tests the Go compiler, not the application. Delete such tests on sight. A test that would still pass if the production code returned a hardcoded value is not testing the production code.
+
+2. **Integration Tests for Multi-Component Features**: See Code Standards #5. Unit tests alone are insufficient for anything that crosses the SDK boundary; require a test that wires up a real `mcp.Server` with an in-memory transport and calls the tool.
+
+3. **Test the Failure Path Through the Real Wiring**: A suite that only validates success bodies cannot see an error result that never reaches the client. Every tool that can fail needs a test that makes it fail — through the server, not the handler.
+
+4. **Dead Code Audit**: Run `make deadcode` before submitting. Functions reported as dead should be deleted or moved to test files. Public API functions are false positives here (this package is a library) and may be ignored with justification.
+
+5. **No Vaporware**: Every package under `pkg/` must be imported by at least one non-test file. Every interface with a noop implementation must also have a real implementation. Do not create packages or interfaces "for future use" — code not wired into the running application is dead code regardless of whether it has its own unit tests.
+   - **The Noop Loophole**: a noop implementation satisfies compile checks, passes tests (returns nil), gets imported (not dead), and wires into the server — yet does nothing. It is the most insidious form of vaporware because every automated gate reports green.
+
+6. **Dependency-First Verification**: Before implementing anything that depends on an external capability (an SDK behavior, an S3 API operation), VERIFY the dependency actually supports it — read the vendored source in `$(go env GOMODCACHE)`, do not infer from the name. If the upstream library lacks the needed behavior, surface that gap IMMEDIATELY rather than building scaffolding around a capability that does not exist.
+
+7. **No Hallucinated Imports**: verify every dependency exists in the Go module ecosystem.
+
+8. **Acceptance Criteria First**: do not write code without Given/When/Then criteria. The criteria must describe user-visible behavior, not internal implementation details.
+
+9. **Explain Non-Obvious Decisions**: comment WHY, not WHAT.
+
+10. **Upstream Behavior Belongs in a Comment**: when code exists to work around or accommodate a dependency's behavior, the comment must name the behavior and where it lives, so a future reader can check whether it still holds after a version bump.

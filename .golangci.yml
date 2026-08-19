@@ -12,6 +12,7 @@ linters:
     - gochecknoinits
     - goconst
     - gocritic
+    - gocognit
     - gocyclo
     - godot
     - goprintffuncname
@@ -50,7 +51,9 @@ linters:
         - performance
         - style
     gocyclo:
-      min-complexity: 20
+      min-complexity: 10
+    gocognit:
+      min-complexity: 15
     godot:
       scope: declarations
       capital: true
@@ -107,11 +110,15 @@ linters:
       - legacy
       - std-error-handling
     rules:
+      # Table-driven tests naturally carry high cyclomatic and cognitive
+      # complexity: the branching lives in the case table, not in logic a
+      # reader has to hold. Production code is still gated at 10/15.
       - linters:
           - dupl
           - errcheck
           - goconst
           - gocritic
+          - gocognit
           - gocyclo
           - gosec
           - lll

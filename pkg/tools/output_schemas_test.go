@@ -2,6 +2,7 @@ package tools
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 )
 
@@ -133,4 +134,44 @@ func TestGetOutputSchema(t *testing.T) {
 			t.Errorf("expected toolkit override when cfg.outputSchema is nil, got %v", schema)
 		}
 	})
+}
+
+// TestDefaultOutputSchema_NullableProperties guards the fix for #141: every
+// property backed by a Go slice or map must admit null, because a nil slice or
+// map marshals as null and the MCP SDK validates structured output even for
+// error results.
+func TestDefaultOutputSchema_NullableProperties(t *testing.T) {
+	nilable := map[ToolName][]string{
+		ToolListBuckets:       {"buckets"},
+		ToolListObjects:       {"objects", "common_prefixes"},
+		ToolGetObject:         {"metadata"},
+		ToolGetObjectMetadata: {"metadata"},
+		ToolListConnections:   {"connections"},
+	}
+
+	for name, props := range nilable {
+		for _, prop := range props {
+			t.Run(fmt.Sprintf("%s/%s", name, prop), func(t *testing.T) {
+				schema, ok := DefaultOutputSchema(name).(map[string]any)
+				if !ok {
+					t.Fatalf("tool %s has no map schema", name)
+				}
+				properties, ok := schema["properties"].(map[string]any)
+				if !ok {
+					t.Fatalf("tool %s schema has no properties", name)
+				}
+				propSchema, ok := properties[prop].(map[string]any)
+				if !ok {
+					t.Fatalf("tool %s has no schema for property %q", name, prop)
+				}
+				types, ok := propSchema["type"].([]string)
+				if !ok {
+					t.Fatalf("property %q type = %#v, want a list of types including \"null\"", prop, propSchema["type"])
+				}
+				if !slices.Contains(types, "null") {
+					t.Errorf("property %q type = %v, want it to include \"null\"", prop, types)
+				}
+			})
+		}
+	}
 }

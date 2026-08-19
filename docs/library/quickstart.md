@@ -115,12 +115,15 @@ toolkit := tools.NewToolkit(s3Client,
         tools.ToolListBuckets: "Show all buckets available to this service account.",
     }),
 
-    // Override output schemas (JSON Schema 2020-12 as map[string]any)
+    // Override output schemas (JSON Schema 2020-12 as map[string]any).
+    // Admit null for any property backed by a Go slice or map: the MCP SDK
+    // validates structured output even for error results, where a nil slice
+    // marshals as null.
     tools.WithOutputSchemas(map[tools.ToolName]any{
         tools.ToolListBuckets: map[string]any{
             "type": "object",
             "properties": map[string]any{
-                "buckets": map[string]any{"type": "array"},
+                "buckets": map[string]any{"type": []string{"array", "null"}},
                 "count":   map[string]any{"type": "integer"},
             },
         },
