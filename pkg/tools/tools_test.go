@@ -2,10 +2,15 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/txn2/mcp-s3/pkg/client"
 )
 
 func TestListBuckets(t *testing.T) {
@@ -664,23 +669,17 @@ func connectToolkit(t *testing.T, tk *Toolkit) *mcp.ClientSession {
 	return cs
 }
 
-// TestToolRegistration_ViaServer exercises the full registration and invocation
-// path for every tool, including the typed-return wrappers in each
-// register*Tool function.
-func TestToolRegistration_ViaServer(t *testing.T) {
-	mock := NewMockS3Client("test")
-	mock.AddBucket("my-bucket", time.Now())
-	mock.AddObject("my-bucket", "hello.txt", []byte("world"), "text/plain")
+// toolCallCase is one valid invocation of a registered tool.
+type toolCallCase struct {
+	name string
+	tool string
+	args map[string]any
+}
 
-	tk := NewToolkit(mock, WithDefaultConnection("test"))
-	cs := connectToolkit(t, tk)
-	ctx := context.Background()
-
-	tests := []struct {
-		name string
-		tool string
-		args map[string]any
-	}{
+// toolCallCases returns a valid invocation for every registered tool, against
+// a mock holding bucket "my-bucket" with object "hello.txt".
+func toolCallCases() []toolCallCase {
+	return []toolCallCase{
 		{
 			name: "list_buckets",
 			tool: "s3_list_buckets",
@@ -740,8 +739,21 @@ func TestToolRegistration_ViaServer(t *testing.T) {
 			args: nil,
 		},
 	}
+}
 
-	for _, tt := range tests {
+// TestToolRegistration_ViaServer exercises the full registration and invocation
+// path for every tool, including the typed-return wrappers in each
+// register*Tool function.
+func TestToolRegistration_ViaServer(t *testing.T) {
+	mock := NewMockS3Client("test")
+	mock.AddBucket("my-bucket", time.Now())
+	mock.AddObject("my-bucket", "hello.txt", []byte("world"), "text/plain")
+
+	tk := NewToolkit(mock, WithDefaultConnection("test"))
+	cs := connectToolkit(t, tk)
+	ctx := context.Background()
+
+	for _, tt := range toolCallCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := cs.CallTool(ctx, &mcp.CallToolParams{
 				Name:      tt.tool,
@@ -778,5 +790,159 @@ func TestMiddlewareFuncWrapper_NilFunctions(t *testing.T) {
 	}
 	if resultOut != result {
 		t.Error("After() should return same result when function is nil")
+	}
+}
+
+// failingMiddleware returns middleware that aborts every tool call before the
+// handler runs, producing an error result with no typed output.
+func failingMiddleware() ToolMiddleware {
+	return BeforeFunc(func(ctx context.Context, _ *ToolContext) (context.Context, error) {
+		return ctx, errors.New("access denied")
+	})
+}
+
+// TestToolFailure_ViaServer asserts that a tool failure reaches the client as
+// the tool's own error result rather than a JSON-RPC error.
+//
+// Regression test for #141: the SDK's typed-handler wrapper validates output
+// even for error results. A nil typed output is replaced by the zero value of
+// the result struct, whose nil slices marshal as JSON null; output schemas that
+// only admit "array" rejected that, turning every failed listing into a
+// transport error and discarding the reason the call failed.
+func TestToolFailure_ViaServer(t *testing.T) {
+	mock := NewMockS3Client("test")
+	mock.AddBucket("my-bucket", time.Now())
+
+	tk := NewToolkit(mock,
+		WithDefaultConnection("test"),
+		WithMiddleware(failingMiddleware()),
+	)
+	cs := connectToolkit(t, tk)
+	ctx := context.Background()
+
+	for _, tt := range toolCallCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := cs.CallTool(ctx, &mcp.CallToolParams{
+				Name:      tt.tool,
+				Arguments: tt.args,
+			})
+			if err != nil {
+				t.Fatalf("CallTool(%s) returned a transport error instead of an error result: %v", tt.tool, err)
+			}
+			if !result.IsError {
+				t.Fatalf("CallTool(%s) result.IsError = false, want true", tt.tool)
+			}
+		})
+	}
+}
+
+// TestListingFailure_ViaServer covers the reported path: the S3 endpoint
+// refuses the listing, so the handler returns an error result with no output.
+func TestListingFailure_ViaServer(t *testing.T) {
+	mock := NewMockS3Client("test")
+	mock.ListBucketsFunc = func(context.Context) ([]client.BucketInfo, error) {
+		return nil, errors.New("AccessDenied: 403")
+	}
+	mock.ListObjectsFunc = func(context.Context, string, string, string, int32, string) (*client.ListObjectsOutput, error) {
+		return nil, errors.New("AccessDenied: 403")
+	}
+
+	tk := NewToolkit(mock, WithDefaultConnection("test"))
+	cs := connectToolkit(t, tk)
+	ctx := context.Background()
+
+	tests := []struct {
+		name string
+		tool string
+		args map[string]any
+	}{
+		{name: "list_buckets", tool: "s3_list_buckets"},
+		{name: "list_objects", tool: "s3_list_objects", args: map[string]any{"bucket": "my-bucket"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := cs.CallTool(ctx, &mcp.CallToolParams{
+				Name:      tt.tool,
+				Arguments: tt.args,
+			})
+			if err != nil {
+				t.Fatalf("CallTool(%s) returned a transport error instead of an error result: %v", tt.tool, err)
+			}
+			if !result.IsError {
+				t.Fatalf("CallTool(%s) result.IsError = false, want true", tt.tool)
+			}
+			if len(result.Content) == 0 {
+				t.Fatalf("CallTool(%s) error result carries no content", tt.tool)
+			}
+			text, ok := result.Content[0].(*mcp.TextContent)
+			if !ok || !strings.Contains(text.Text, "AccessDenied") {
+				t.Errorf("CallTool(%s) content = %#v, want the underlying failure reason", tt.tool, result.Content[0])
+			}
+		})
+	}
+}
+
+// TestEmptyListing_ViaServer asserts an account with no buckets and a prefix
+// matching no objects both answer with an empty list, not an error.
+func TestEmptyListing_ViaServer(t *testing.T) {
+	mock := NewMockS3Client("test")
+	mock.ListBucketsFunc = func(context.Context) ([]client.BucketInfo, error) {
+		return nil, nil
+	}
+	mock.ListObjectsFunc = func(context.Context, string, string, string, int32, string) (*client.ListObjectsOutput, error) {
+		return &client.ListObjectsOutput{}, nil
+	}
+
+	tk := NewToolkit(mock, WithDefaultConnection("test"))
+	cs := connectToolkit(t, tk)
+	ctx := context.Background()
+
+	tests := []struct {
+		name     string
+		tool     string
+		args     map[string]any
+		property string
+	}{
+		{name: "list_buckets", tool: "s3_list_buckets", property: "buckets"},
+		{
+			name:     "list_objects",
+			tool:     "s3_list_objects",
+			args:     map[string]any{"bucket": "my-bucket", "prefix": "nothing/"},
+			property: "objects",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := cs.CallTool(ctx, &mcp.CallToolParams{
+				Name:      tt.tool,
+				Arguments: tt.args,
+			})
+			if err != nil {
+				t.Fatalf("CallTool(%s) error: %v", tt.tool, err)
+			}
+			if result.IsError {
+				t.Fatalf("CallTool(%s) result.IsError = true, want false", tt.tool)
+			}
+
+			// Round-trip through JSON: StructuredContent is untyped on the
+			// client side, and this is the wire form the client sees.
+			raw, err := json.Marshal(result.StructuredContent)
+			if err != nil {
+				t.Fatalf("marshaling structured content: %v", err)
+			}
+			var structured map[string]any
+			if err := json.Unmarshal(raw, &structured); err != nil {
+				t.Fatalf("unmarshaling structured content: %v", err)
+			}
+			list, ok := structured[tt.property].([]any)
+			if !ok {
+				t.Fatalf("structured %q = %#v, want an empty array", tt.property, structured[tt.property])
+			}
+			if len(list) != 0 {
+				t.Errorf("structured %q has %d entries, want 0", tt.property, len(list))
+			}
+		})
 	}
 }
