@@ -13,6 +13,11 @@ GO_VERSION := $(shell go version | cut -d ' ' -f 3)
 COVERAGE_FILE := coverage.out
 COVERAGE_THRESHOLD := 80
 
+# Records the working-tree diff hash that `verify` last passed against, so a
+# pre-commit gate can tell "verify is green on THIS tree" from "verify is green
+# on some other tree". Written only after every check succeeds; gitignored.
+VERIFY_SENTINEL := .claude/.last-verify-passed
+
 # Directories
 CMD_DIR := ./cmd/mcp-s3
 BUILD_DIR := ./build
@@ -120,6 +125,8 @@ install: build
 
 ## verify: Run full verification suite
 verify: tidy lint test coverage security deadcode build-check
+	@mkdir -p .claude
+	@{ git diff --cached HEAD; git diff; } | shasum -a 256 | cut -c1-16 > $(VERIFY_SENTINEL)
 	@echo "All verification checks passed."
 
 ## docker-build: Build Docker image

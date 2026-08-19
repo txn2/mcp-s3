@@ -2,7 +2,7 @@ module github.com/txn2/mcp-s3
 
 go 1.25.0
 
-toolchain go1.26.4
+toolchain go1.26.6
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.42.1

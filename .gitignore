@@ -35,6 +35,9 @@ go.work.sum
 # .vscode/
 settings.local.json
 
+# Local verification sentinel written by `make verify` (see the verify target)
+.claude/.last-verify-passed
+
 # MkDocs generated site
 site/
 
