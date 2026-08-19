@@ -183,6 +183,14 @@ print-%:
 ## version-shaped match returns the toolchain and hands every developer a false
 ## mismatch they cannot clear.
 tools-check:
+	@# Clear any sentinel from an earlier run before the suite begins.
+	@# tools-check is verify's first prerequisite, and this is the only step
+	@# guaranteed to run before anything that can fail. Without it, a failure
+	@# in lint or test leaves the previous run's sentinel in place, and a tree
+	@# that returns byte-identical to one that passed before (edit-then-revert
+	@# plus a flaky test) would clear the gate on a suite that never finished.
+	@# Deleting it fails closed: the gate blocks until a full run rewrites it.
+	@rm -f $(VERIFY_SENTINEL)
 	@echo "Checking required tools (presence AND pinned versions)..."
 	@missing=""; mismatch=""; \
 	if ! which golangci-lint > /dev/null 2>&1; then \
@@ -223,6 +231,8 @@ tools-check:
 	fi; \
 	which deadcode > /dev/null 2>&1 || missing="$$missing  deadcode: go install golang.org/x/tools/cmd/deadcode@latest\n"; \
 	which python3 > /dev/null 2>&1  || missing="$$missing  python3: required by scripts/govulncheck-gate.py\n"; \
+	which git > /dev/null 2>&1      || missing="$$missing  git: required by patch-coverage and the gate sentinel\n"; \
+	command -v shasum > /dev/null 2>&1 || missing="$$missing  shasum: required to write the gate sentinel (the commit gate hashes with 'shasum -a 256' and has no sha256sum fallback)\n"; \
 	if [ -n "$$missing" ]; then \
 		echo ""; \
 		echo "FAIL: Missing required tools:"; \
@@ -288,7 +298,6 @@ install: build
 ## no point running the suite before that is established.
 verify: tools-check tidy lint test coverage patch-coverage security deadcode build-check
 	@echo ""
-	@echo "=== All checks passed ==="
 	@# Write the gate sentinel: the short SHA-256 of the working-tree diff
 	@# (staged + unstaged) at the moment verify completed. The pre-commit
 	@# review gate (~/.claude/hooks/review-gate.sh) compares this hash to the
@@ -297,11 +306,47 @@ verify: tools-check tidy lint test coverage patch-coverage security deadcode bui
 	@# than on some earlier tree that has since moved.
 	@#
 	@# Hash computation MUST stay byte-identical to compute_diff_hash() in
-	@# review-gate.sh, otherwise the gate rejects every commit.
+	@# review-gate.sh. That function hardcodes `shasum -a 256`, so this uses
+	@# shasum too and deliberately does NOT fall back to sha256sum: the digests
+	@# are identical, but a fallback would only ever fire on a machine without
+	@# shasum, which is exactly where the hook cannot compute a hash at all.
+	@# The Makefile would write a valid hash, the hook would compute an empty
+	@# one, and every commit would be blocked. Matching the hook's tool matters
+	@# more than tolerating its absence; tools-check requires shasum up front.
+	@#
+	@# The result is validated rather than trusted, because the failure is
+	@# silent and fails OPEN. Without a hasher the pipeline writes an EMPTY
+	@# file while `cut` still exits 0. The hook then reads sentinel_hash="",
+	@# computes hash="" itself, and "" == "" compares TRUE — so the gate waves
+	@# through every commit with no verification at all. A gate that fails open
+	@# is worse than no gate, since it reports protection it is not providing.
 	@mkdir -p .claude
-	@{ git diff --cached HEAD 2>/dev/null; git diff 2>/dev/null; } \
-		| shasum -a 256 | cut -c1-16 > $(VERIFY_SENTINEL)
-	@echo "Wrote $(VERIFY_SENTINEL) (gate sentinel)"
+	@if ! command -v shasum > /dev/null 2>&1; then \
+		echo "FAIL: shasum not found; cannot write the gate sentinel."; \
+		echo "      The pre-commit gate hashes with 'shasum -a 256' and has no"; \
+		echo "      fallback, so without it the gate silently passes unverified"; \
+		echo "      trees. Install shasum (perl-digest-sha on most distros)."; \
+		rm -f $(VERIFY_SENTINEL); \
+		exit 1; \
+	fi; \
+	{ git diff --cached HEAD 2>/dev/null; git diff 2>/dev/null; } \
+		| shasum -a 256 | cut -c1-16 > $(VERIFY_SENTINEL); \
+	written=$$(cat $(VERIFY_SENTINEL) 2>/dev/null); \
+	case "$$written" in \
+		[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;; \
+		*) \
+			echo "FAIL: gate sentinel is not a 16-character hex hash: '$$written'"; \
+			rm -f $(VERIFY_SENTINEL); \
+			exit 1; \
+			;; \
+	esac; \
+	echo "Wrote $(VERIFY_SENTINEL) (gate sentinel: $$written)"
+	@# The banner comes last, after the sentinel is written and validated.
+	@# Printing it earlier announced success while a step that can still fail
+	@# had not run — the same "report the pass, bury the failure" shape the
+	@# Factual Integrity section in CLAUDE.md exists to prevent.
+	@echo ""
+	@echo "=== All checks passed ==="
 
 ## docker-build: Build Docker image
 docker-build:
