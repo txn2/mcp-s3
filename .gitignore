@@ -35,8 +35,14 @@ go.work.sum
 # .vscode/
 settings.local.json
 
-# Local verification sentinel written by `make verify` (see the verify target)
+# Local gate artifacts: the sentinel `make verify` writes (see the verify
+# target) and the adversarial-review verdict (see Development Workflow in
+# CLAUDE.md). Both describe one working tree at one moment, not the repo.
 .claude/.last-verify-passed
+.claude/.last-review.md
+
+# govulncheck JSON report, consumed by scripts/govulncheck-gate.py
+build/govulncheck-report.json
 
 # MkDocs generated site
 site/

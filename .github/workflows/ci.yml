@@ -19,15 +19,22 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: true
 
+      # Read the pin from the Makefile rather than repeating it here. A
+      # hand-copied version drifts from the one `make tools-check` holds
+      # developers to, and nothing detects that drift.
+      - name: Read pinned linter version
+        id: pins
+        run: echo "golangci=$(make print-GOLANGCI_LINT_VERSION)" >> "$GITHUB_OUTPUT"
+
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          version: v2.11.4
+          version: ${{ steps.pins.outputs.golangci }}
           args: --timeout=5m
 
   test:
@@ -40,7 +47,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: true
@@ -67,7 +74,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: true
@@ -88,18 +95,29 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: true
 
-      - name: Run Gosec Security Scanner
+      # Install the exact versions the Makefile pins, then run the same target
+      # `make verify` runs locally. Two things depend on this being one command
+      # rather than two hand-rolled steps:
+      #
+      #   - govulncheck findings are judged against .govulncheck-allow.txt by
+      #     scripts/govulncheck-gate.py. golang/govulncheck-action fails on any
+      #     called vulnerability and cannot see the allow file, so the first
+      #     accepted advisory -- the case the allow file exists for -- would
+      #     pass locally and fail here.
+      #   - that action installs govulncheck@latest, so there was no version to
+      #     mirror and `make tools-check` was pinning developers to a version CI
+      #     never ran.
+      - name: Install pinned scanners
         run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@v2.22.0
-          gosec ./...
+          GOSEC_VERSION=$(make print-GOSEC_VERSION)
+          GOVULNCHECK_VERSION=$(make print-GOVULNCHECK_VERSION)
+          go install "github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}"
+          go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
 
-      - name: Run govulncheck
-        uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
-        with:
-          go-version-file: go.mod
-          repo-checkout: false
+      - name: Run security scan (gosec + gated govulncheck)
+        run: make security

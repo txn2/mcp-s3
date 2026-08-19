@@ -25,7 +25,7 @@ func nullableObject(additionalProperties any) map[string]any {
 }
 
 // defaultOutputSchemas holds the default JSON Schema (2020-12) for each tool's
-// structured output. Schemas use map[string]any so they can be remaarshaleld by
+// structured output. Schemas use map[string]any so they can be remarshaled by
 // the MCP SDK's schema resolution pipeline.
 //
 // All schemas declare only "type" and "properties" — no "required" constraints
