@@ -3,9 +3,14 @@ package client
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"math"
+	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -14,6 +19,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
 // Client wraps the AWS S3 SDK client with convenience methods.
@@ -53,9 +59,11 @@ type ObjectMetadata struct {
 
 // ObjectContent contains the content and metadata of an S3 object.
 type ObjectContent struct {
-	Key          string
-	Body         []byte
-	ContentType  string
+	Key         string
+	Body        []byte
+	ContentType string
+	// Size is the whole object's length. From GetObjectRange it can exceed
+	// len(Body).
 	Size         int64
 	LastModified time.Time
 	ETag         string
@@ -338,6 +346,149 @@ func (c *Client) GetObject(ctx context.Context, bucket, key string) (*ObjectCont
 	}
 
 	return result, nil
+}
+
+// ErrInvalidRange is returned by GetObjectRange for an offset or length no
+// byte range can be built from. No request is made.
+var ErrInvalidRange = errors.New("invalid byte range")
+
+// ErrRangeNotSatisfiable is returned by GetObjectRange when the store answers
+// 416: the offset is at or past the end of the object, which includes every
+// offset of a zero-byte object.
+var ErrRangeNotSatisfiable = errors.New("byte range not satisfiable")
+
+// GetObjectRange reads length bytes of an object starting at offset.
+//
+// The returned Size is the object's TOTAL size, read from the response's
+// Content-Range, not the length of Body: a caller reading the tail of a file
+// learns how large the file is from the same call. Size is -1 when the store
+// reports no total ("bytes 0-99/*"). Body may be shorter than length when the
+// range runs past the end of the object.
+//
+// A store that ignores Range answers with the whole object. Body is still the
+// bytes at offset, at most length of them: the bytes before offset are read
+// and discarded, never held.
+//
+// A zero-byte object has no byte to start a range at, and S3 refuses any
+// ranged GET of one with 416 InvalidRange. That is returned as
+// ErrRangeNotSatisfiable, the same error as an offset past the end of a
+// non-empty object, and not as an empty Body: an empty Body with Size 0 would
+// be indistinguishable from a read that failed. A caller that needs to tell
+// the two apart asks GetObjectMetadata for the size.
+func (c *Client) GetObjectRange(ctx context.Context, bucket, key string, offset, length int64) (*ObjectContent, error) {
+	// The last clause keeps offset+length-1 inside int64: a wrapped end is a
+	// Range the store cannot parse, and a store ignores one of those and
+	// answers with the whole object.
+	if offset < 0 || length <= 0 || offset > math.MaxInt64-length {
+		return nil, fmt.Errorf("%w: offset %d, length %d", ErrInvalidRange, offset, length)
+	}
+
+	ctx, cancel := c.contextWithTimeout(ctx)
+	defer cancel()
+
+	output, err := c.s3Client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+		Range:  aws.String("bytes=" + strconv.FormatInt(offset, 10) + "-" + strconv.FormatInt(offset+length-1, 10)),
+	})
+	if err != nil {
+		// The SDK wraps a non-2xx response in smithy-go's
+		// transport/http.ResponseError, which carries the status code.
+		var respErr *smithyhttp.ResponseError
+		if errors.As(err, &respErr) && respErr.HTTPStatusCode() == http.StatusRequestedRangeNotSatisfiable {
+			return nil, fmt.Errorf("failed to get object range: %w: %w", ErrRangeNotSatisfiable, err)
+		}
+		return nil, fmt.Errorf("failed to get object range: %w", err)
+	}
+	defer func() { _ = output.Body.Close() }()
+
+	size, err := seekRangeStart(output, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	// Bounded by what was asked for: a store that ignores Range answers with
+	// the whole object, and a caller reading 8 bytes of a gigabyte file must
+	// not hold the gigabyte.
+	body, err := io.ReadAll(io.LimitReader(output.Body, length))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read object range: %w", err)
+	}
+
+	result := &ObjectContent{
+		Key:         key,
+		Body:        body,
+		ContentType: aws.ToString(output.ContentType),
+		Size:        size,
+		ETag:        aws.ToString(output.ETag),
+		Metadata:    output.Metadata,
+	}
+	if output.LastModified != nil {
+		result.LastModified = *output.LastModified
+	}
+	return result, nil
+}
+
+// seekRangeStart leaves output.Body positioned at offset and returns the
+// object's total size, -1 when the store does not report one.
+//
+// A response with a Content-Range is a honored range; its start must be the
+// offset asked for. A response without one is a store that ignored Range and
+// sent the whole object from byte 0, so the bytes before offset are discarded
+// as they stream past rather than returned as though they were the range.
+func seekRangeStart(output *s3.GetObjectOutput, offset int64) (int64, error) {
+	if output.ContentRange != nil {
+		start, total, ok := parseContentRange(*output.ContentRange)
+		if !ok || start != offset {
+			return 0, fmt.Errorf("unexpected Content-Range %q for a range at offset %d", *output.ContentRange, offset)
+		}
+		return total, nil
+	}
+
+	size := int64(-1)
+	if output.ContentLength != nil {
+		size = *output.ContentLength
+	}
+	if size >= 0 && offset >= size {
+		return 0, fmt.Errorf("%w: offset %d, object size %d", ErrRangeNotSatisfiable, offset, size)
+	}
+	if _, err := io.CopyN(io.Discard, output.Body, offset); err != nil {
+		if errors.Is(err, io.EOF) {
+			return 0, fmt.Errorf("%w: offset %d is past the end of the object", ErrRangeNotSatisfiable, offset)
+		}
+		return 0, fmt.Errorf("failed to read object range: %w", err)
+	}
+	return size, nil
+}
+
+// parseContentRange reads a Content-Range header of a partial response,
+// "bytes <start>-<end>/<total>", reporting a total of -1 when the store sends
+// "*" for a length it does not know.
+func parseContentRange(header string) (start, total int64, ok bool) {
+	spec, found := strings.CutPrefix(header, "bytes ")
+	if !found {
+		return 0, 0, false
+	}
+	span, totalText, found := strings.Cut(spec, "/")
+	if !found {
+		return 0, 0, false
+	}
+	startText, _, found := strings.Cut(span, "-")
+	if !found {
+		return 0, 0, false
+	}
+	start, err := strconv.ParseInt(startText, 10, 64)
+	if err != nil || start < 0 {
+		return 0, 0, false
+	}
+	if totalText == "*" {
+		return start, -1, true
+	}
+	total, err = strconv.ParseInt(totalText, 10, 64)
+	if err != nil || total < 0 {
+		return 0, 0, false
+	}
+	return start, total, true
 }
 
 // GetObjectMetadata retrieves an object's metadata without downloading the content.

@@ -232,7 +232,6 @@ tools-check:
 	which deadcode > /dev/null 2>&1 || missing="$$missing  deadcode: go install golang.org/x/tools/cmd/deadcode@latest\n"; \
 	which python3 > /dev/null 2>&1  || missing="$$missing  python3: required by scripts/govulncheck-gate.py\n"; \
 	which git > /dev/null 2>&1      || missing="$$missing  git: required by patch-coverage and the gate sentinel\n"; \
-	command -v shasum > /dev/null 2>&1 || missing="$$missing  shasum: required to write the gate sentinel (the commit gate hashes with 'shasum -a 256' and has no sha256sum fallback)\n"; \
 	if [ -n "$$missing" ]; then \
 		echo ""; \
 		echo "FAIL: Missing required tools:"; \
@@ -298,39 +297,32 @@ install: build
 ## no point running the suite before that is established.
 verify: tools-check tidy lint test coverage patch-coverage security deadcode build-check
 	@echo ""
-	@# Write the gate sentinel: the short SHA-256 of the working-tree diff
-	@# (staged + unstaged) at the moment verify completed. The pre-commit
-	@# review gate (~/.claude/hooks/review-gate.sh) compares this hash to the
-	@# live diff at commit time — if they match, this verify run is proof that
-	@# CI-equivalent checks passed on the exact code being committed, rather
-	@# than on some earlier tree that has since moved.
+	@# Write the gate sentinel: the tree hash of the working tree (tracked,
+	@# staged, and untracked-but-not-ignored files) at the moment verify
+	@# completed. The pre-commit review gate (~/.claude/hooks/review-gate.sh)
+	@# compares this hash to the live tree at commit time — if they match, this
+	@# verify run is proof that CI-equivalent checks passed on the exact code
+	@# being committed, rather than on some earlier tree that has since moved.
 	@#
-	@# Hash computation MUST stay byte-identical to compute_diff_hash() in
-	@# review-gate.sh. That function hardcodes `shasum -a 256`, so this uses
-	@# shasum too and deliberately does NOT fall back to sha256sum: the digests
-	@# are identical, but a fallback would only ever fire on a machine without
-	@# shasum, which is exactly where the hook cannot compute a hash at all.
-	@# The Makefile would write a valid hash, the hook would compute an empty
-	@# one, and every commit would be blocked. Matching the hook's tool matters
-	@# more than tolerating its absence; tools-check requires shasum up front.
+	@# Hash computation MUST stay identical to compute_diff_hash() in
+	@# review-gate.sh: HEAD read into a throwaway index, `git add -A` into it,
+	@# `git write-tree`, first 16 hex characters. A throwaway index leaves the
+	@# real one untouched, and `git add -A` makes a new untracked file part of
+	@# the hash; a hash of `git diff` output never saw untracked files, so it
+	@# could not match the hook for any change that added one.
 	@#
 	@# The result is validated rather than trusted, because the failure is
-	@# silent and fails OPEN. Without a hasher the pipeline writes an EMPTY
-	@# file while `cut` still exits 0. The hook then reads sentinel_hash="",
-	@# computes hash="" itself, and "" == "" compares TRUE — so the gate waves
-	@# through every commit with no verification at all. A gate that fails open
-	@# is worse than no gate, since it reports protection it is not providing.
+	@# silent and fails OPEN. If the pipeline writes an EMPTY file, the hook
+	@# reads sentinel_hash="", and should it also compute hash="" itself,
+	@# "" == "" compares TRUE — so the gate waves through every commit with no
+	@# verification at all. A gate that fails open is worse than no gate, since
+	@# it reports protection it is not providing.
 	@mkdir -p .claude
-	@if ! command -v shasum > /dev/null 2>&1; then \
-		echo "FAIL: shasum not found; cannot write the gate sentinel."; \
-		echo "      The pre-commit gate hashes with 'shasum -a 256' and has no"; \
-		echo "      fallback, so without it the gate silently passes unverified"; \
-		echo "      trees. Install shasum (perl-digest-sha on most distros)."; \
-		rm -f $(VERIFY_SENTINEL); \
-		exit 1; \
-	fi; \
-	{ git diff --cached HEAD 2>/dev/null; git diff 2>/dev/null; } \
-		| shasum -a 256 | cut -c1-16 > $(VERIFY_SENTINEL); \
+	@idx=$$(mktemp -d); \
+	git read-tree --index-output="$$idx/index" HEAD 2>/dev/null; \
+	GIT_INDEX_FILE="$$idx/index" git add -A 2>/dev/null; \
+	GIT_INDEX_FILE="$$idx/index" git write-tree 2>/dev/null | cut -c1-16 > $(VERIFY_SENTINEL); \
+	rm -rf "$$idx"; \
 	written=$$(cat $(VERIFY_SENTINEL) 2>/dev/null); \
 	case "$$written" in \
 		[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;; \
