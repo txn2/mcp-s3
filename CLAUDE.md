@@ -196,7 +196,8 @@ Environment variables:
 - `AWS_PROFILE` - Profile name (optional)
 - `S3_ENDPOINT` - Custom endpoint for S3-compatible storage
 - `S3_USE_PATH_STYLE` - Use path-style URLs (required for most S3-compatible storage)
-- `S3_TIMEOUT` - Operation timeout (default: 30s)
+- `S3_TIMEOUT` - Operation timeout (default: 30s); for object reads, up to the response headers only
+- `S3_READ_IDLE_TIMEOUT` - Longest stall allowed while reading an object body (default: 30s)
 - `MCP_S3_EXT_READONLY` - Block write operations (default: true)
 - `MCP_S3_EXT_SIZELIMIT` - Enforce size limits (default: true)
 - `MCP_S3_MAX_GET_SIZE` - Max bytes for GET (default: 10MB)

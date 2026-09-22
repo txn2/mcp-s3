@@ -38,6 +38,7 @@ Complete technical reference for mcp-s3.
 | `S3_ENDPOINT` | | Custom endpoint for S3-compatible storage |
 | `S3_USE_PATH_STYLE` | `false` | Use path-style URLs |
 | `S3_TIMEOUT` | `30s` | Operation timeout |
+| `S3_READ_IDLE_TIMEOUT` | `30s` | Longest stall allowed while reading an object body |
 
 ### Extensions
 

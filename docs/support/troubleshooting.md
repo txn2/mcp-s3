@@ -56,6 +56,9 @@ Error: connection timeout after 30s
    ```bash
    export S3_TIMEOUT=60s
    ```
+   `S3_TIMEOUT` covers reaching S3 and getting a response. A large object
+   that is still downloading is not cut off by it; the body read fails only
+   when no data arrives for `S3_READ_IDLE_TIMEOUT` (default `30s`).
 
 3. Test with AWS CLI:
    ```bash

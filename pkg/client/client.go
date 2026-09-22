@@ -316,21 +316,21 @@ func (c *Client) ListObjects(
 
 // GetObject retrieves an object's content from S3.
 func (c *Client) GetObject(ctx context.Context, bucket, key string) (*ObjectContent, error) {
-	ctx, cancel := c.contextWithTimeout(ctx)
-	defer cancel()
+	d := c.startRead(ctx)
+	defer d.stop()
 
-	output, err := c.s3Client.GetObject(ctx, &s3.GetObjectInput{
+	output, err := c.s3Client.GetObject(d.ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get object: %w", err)
+		return nil, fmt.Errorf("failed to get object: %w", d.explain(err))
 	}
 	defer func() { _ = output.Body.Close() }()
 
-	body, err := io.ReadAll(output.Body)
+	body, err := io.ReadAll(d.body(output.Body))
 	if err != nil {
-		return nil, fmt.Errorf("failed to read object body: %w", err)
+		return nil, fmt.Errorf("failed to read object body: %w", d.explain(err))
 	}
 
 	result := &ObjectContent{
@@ -383,10 +383,10 @@ func (c *Client) GetObjectRange(ctx context.Context, bucket, key string, offset,
 		return nil, fmt.Errorf("%w: offset %d, length %d", ErrInvalidRange, offset, length)
 	}
 
-	ctx, cancel := c.contextWithTimeout(ctx)
-	defer cancel()
+	d := c.startRead(ctx)
+	defer d.stop()
 
-	output, err := c.s3Client.GetObject(ctx, &s3.GetObjectInput{
+	output, err := c.s3Client.GetObject(d.ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 		Range:  aws.String("bytes=" + strconv.FormatInt(offset, 10) + "-" + strconv.FormatInt(offset+length-1, 10)),
@@ -398,21 +398,22 @@ func (c *Client) GetObjectRange(ctx context.Context, bucket, key string, offset,
 		if errors.As(err, &respErr) && respErr.HTTPStatusCode() == http.StatusRequestedRangeNotSatisfiable {
 			return nil, fmt.Errorf("failed to get object range: %w: %w", ErrRangeNotSatisfiable, err)
 		}
-		return nil, fmt.Errorf("failed to get object range: %w", err)
+		return nil, fmt.Errorf("failed to get object range: %w", d.explain(err))
 	}
 	defer func() { _ = output.Body.Close() }()
 
-	size, err := seekRangeStart(output, offset)
+	bodyReader := d.body(output.Body)
+	size, err := seekRangeStart(output, bodyReader, offset)
 	if err != nil {
-		return nil, err
+		return nil, d.explain(err)
 	}
 
 	// Bounded by what was asked for: a store that ignores Range answers with
 	// the whole object, and a caller reading 8 bytes of a gigabyte file must
 	// not hold the gigabyte.
-	body, err := io.ReadAll(io.LimitReader(output.Body, length))
+	body, err := io.ReadAll(io.LimitReader(bodyReader, length))
 	if err != nil {
-		return nil, fmt.Errorf("failed to read object range: %w", err)
+		return nil, fmt.Errorf("failed to read object range: %w", d.explain(err))
 	}
 
 	result := &ObjectContent{
@@ -429,14 +430,15 @@ func (c *Client) GetObjectRange(ctx context.Context, bucket, key string, offset,
 	return result, nil
 }
 
-// seekRangeStart leaves output.Body positioned at offset and returns the
-// object's total size, -1 when the store does not report one.
+// seekRangeStart leaves body, the reader over output's body, positioned at
+// offset and returns the object's total size, -1 when the store does not
+// report one.
 //
 // A response with a Content-Range is a honored range; its start must be the
 // offset asked for. A response without one is a store that ignored Range and
 // sent the whole object from byte 0, so the bytes before offset are discarded
 // as they stream past rather than returned as though they were the range.
-func seekRangeStart(output *s3.GetObjectOutput, offset int64) (int64, error) {
+func seekRangeStart(output *s3.GetObjectOutput, body io.Reader, offset int64) (int64, error) {
 	if output.ContentRange != nil {
 		start, total, ok := parseContentRange(*output.ContentRange)
 		if !ok || start != offset {
@@ -452,7 +454,7 @@ func seekRangeStart(output *s3.GetObjectOutput, offset int64) (int64, error) {
 	if size >= 0 && offset >= size {
 		return 0, fmt.Errorf("%w: offset %d, object size %d", ErrRangeNotSatisfiable, offset, size)
 	}
-	if _, err := io.CopyN(io.Discard, output.Body, offset); err != nil {
+	if _, err := io.CopyN(io.Discard, body, offset); err != nil {
 		if errors.Is(err, io.EOF) {
 			return 0, fmt.Errorf("%w: offset %d is past the end of the object", ErrRangeNotSatisfiable, offset)
 		}
