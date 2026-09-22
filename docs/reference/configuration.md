@@ -20,7 +20,8 @@ Complete configuration reference for mcp-s3.
 |----------|---------|-------------|
 | `S3_ENDPOINT` | | Custom endpoint URL for S3-compatible storage |
 | `S3_USE_PATH_STYLE` | `false` | Use path-style URLs instead of virtual-hosted |
-| `S3_TIMEOUT` | `30s` | Timeout for S3 operations |
+| `S3_TIMEOUT` | `30s` | Timeout for S3 operations. For object reads, covers the request up to the response headers, not the body transfer |
+| `S3_READ_IDLE_TIMEOUT` | `30s` | Longest stall allowed while an object body is being read; a transfer that keeps moving is never cut off |
 | `S3_CONNECTION_NAME` | `default` | Name for the primary connection |
 
 ### Multi-Connection

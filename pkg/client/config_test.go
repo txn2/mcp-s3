@@ -10,7 +10,7 @@ func TestFromEnv(t *testing.T) {
 	envVars := []string{
 		"AWS_REGION", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
 		"AWS_SESSION_TOKEN", "AWS_PROFILE", "S3_ENDPOINT",
-		"S3_USE_PATH_STYLE", "S3_TIMEOUT", "S3_CONNECTION_NAME", "S3_DISABLE_SSL",
+		"S3_USE_PATH_STYLE", "S3_TIMEOUT", "S3_READ_IDLE_TIMEOUT", "S3_CONNECTION_NAME", "S3_DISABLE_SSL",
 	}
 
 	saved := saveEnv(envVars)
@@ -21,6 +21,7 @@ func TestFromEnv(t *testing.T) {
 		cfg := FromEnv()
 		assertString(t, "Region", DefaultRegion, cfg.Region)
 		assertDuration(t, DefaultTimeout, cfg.Timeout)
+		assertDuration(t, DefaultReadIdleTimeout, cfg.ReadIdleTimeout)
 		assertBool(t, "UsePathStyle", false, cfg.UsePathStyle)
 		assertBool(t, "DisableSSL", false, cfg.DisableSSL)
 	})
@@ -35,6 +36,7 @@ func TestFromEnv(t *testing.T) {
 			"S3_ENDPOINT":           "http://localhost:9000",
 			"S3_USE_PATH_STYLE":     "true",
 			"S3_TIMEOUT":            "60s",
+			"S3_READ_IDLE_TIMEOUT":  "45s",
 			"S3_CONNECTION_NAME":    "test-conn",
 			"S3_DISABLE_SSL":        "true",
 		})
@@ -49,6 +51,7 @@ func TestFromEnv(t *testing.T) {
 		assertString(t, "Endpoint", "http://localhost:9000", cfg.Endpoint)
 		assertBool(t, "UsePathStyle", true, cfg.UsePathStyle)
 		assertDuration(t, 60*time.Second, cfg.Timeout)
+		assertDuration(t, 45*time.Second, cfg.ReadIdleTimeout)
 		assertString(t, "Name", "test-conn", cfg.Name)
 		assertBool(t, "DisableSSL", true, cfg.DisableSSL)
 	})
@@ -193,15 +196,17 @@ func TestConfig_Validate(t *testing.T) {
 		}
 		assertString(t, "Region", DefaultRegion, cfg.Region)
 		assertDuration(t, DefaultTimeout, cfg.Timeout)
+		assertDuration(t, DefaultReadIdleTimeout, cfg.ReadIdleTimeout)
 	})
 
 	t.Run("preserves custom values", func(t *testing.T) {
-		cfg := &Config{Region: "ap-southeast-1", Timeout: 120 * time.Second}
+		cfg := &Config{Region: "ap-southeast-1", Timeout: 120 * time.Second, ReadIdleTimeout: 90 * time.Second}
 		if err := cfg.Validate(); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 		assertString(t, "Region", "ap-southeast-1", cfg.Region)
 		assertDuration(t, 120*time.Second, cfg.Timeout)
+		assertDuration(t, 90*time.Second, cfg.ReadIdleTimeout)
 	})
 }
 
@@ -255,6 +260,7 @@ func TestConfig_Clone(t *testing.T) {
 		Profile:         "test-profile",
 		UsePathStyle:    true,
 		Timeout:         60 * time.Second,
+		ReadIdleTimeout: 45 * time.Second,
 		Name:            "test-conn",
 		DisableSSL:      true,
 	}
@@ -332,6 +338,7 @@ func assertConfigEqual(t *testing.T, expected, got *Config) {
 	assertString(t, "Profile", expected.Profile, got.Profile)
 	assertBool(t, "UsePathStyle", expected.UsePathStyle, got.UsePathStyle)
 	assertDuration(t, expected.Timeout, got.Timeout)
+	assertDuration(t, expected.ReadIdleTimeout, got.ReadIdleTimeout)
 	assertString(t, "Name", expected.Name, got.Name)
 	assertBool(t, "DisableSSL", expected.DisableSSL, got.DisableSSL)
 }

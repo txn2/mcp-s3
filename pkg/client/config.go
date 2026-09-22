@@ -10,8 +10,9 @@ import (
 
 // Default values for configuration.
 const (
-	DefaultRegion  = "us-east-1"
-	DefaultTimeout = 30 * time.Second
+	DefaultRegion          = "us-east-1"
+	DefaultTimeout         = 30 * time.Second
+	DefaultReadIdleTimeout = 30 * time.Second
 )
 
 // Config holds the configuration for connecting to an S3-compatible storage service.
@@ -45,8 +46,16 @@ type Config struct {
 	// Required for some S3-compatible services like SeaweedFS.
 	UsePathStyle bool
 
-	// Timeout is the timeout for S3 operations.
+	// Timeout is the timeout for S3 operations. For GetObject and
+	// GetObjectRange it bounds the request up to the response headers, not the
+	// body read that follows; ReadIdleTimeout governs that.
 	Timeout time.Duration
+
+	// ReadIdleTimeout bounds how long a GetObject or GetObjectRange body read
+	// may go without receiving a byte. It is a stall detector, not a total:
+	// a transfer that keeps making progress is never cut off, whatever the
+	// object's size.
+	ReadIdleTimeout time.Duration
 
 	// Name is an optional identifier for this connection (used in multi-connection setups).
 	Name string
@@ -67,6 +76,7 @@ type Config struct {
 //   - S3_PRESIGN_ENDPOINT: Public endpoint for presigned URLs (optional)
 //   - S3_USE_PATH_STYLE: Use path-style URLs (default: false)
 //   - S3_TIMEOUT: Operation timeout (default: 30s)
+//   - S3_READ_IDLE_TIMEOUT: Longest stall allowed while reading an object body (default: 30s)
 //   - S3_CONNECTION_NAME: Connection name (optional)
 //   - S3_DISABLE_SSL: Disable SSL (default: false)
 func FromEnv() Config {
@@ -80,6 +90,7 @@ func FromEnv() Config {
 		Profile:         getEnvSanitized("AWS_PROFILE"),
 		UsePathStyle:    getEnvBool("S3_USE_PATH_STYLE", false),
 		Timeout:         getEnvDuration("S3_TIMEOUT", DefaultTimeout),
+		ReadIdleTimeout: getEnvDuration("S3_READ_IDLE_TIMEOUT", DefaultReadIdleTimeout),
 		Name:            getEnvSanitized("S3_CONNECTION_NAME"),
 		DisableSSL:      getEnvBool("S3_DISABLE_SSL", false),
 	}
@@ -96,6 +107,10 @@ func (c *Config) Validate() error {
 
 	if c.Timeout <= 0 {
 		c.Timeout = DefaultTimeout
+	}
+
+	if c.ReadIdleTimeout <= 0 {
+		c.ReadIdleTimeout = DefaultReadIdleTimeout
 	}
 
 	return nil
@@ -123,6 +138,7 @@ func (c *Config) Clone() *Config {
 		Profile:         c.Profile,
 		UsePathStyle:    c.UsePathStyle,
 		Timeout:         c.Timeout,
+		ReadIdleTimeout: c.ReadIdleTimeout,
 		Name:            c.Name,
 		DisableSSL:      c.DisableSSL,
 	}

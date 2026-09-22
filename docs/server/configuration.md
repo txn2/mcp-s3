@@ -20,7 +20,8 @@ mcp-s3 is configured entirely through environment variables.
 |----------|-------------|---------|
 | `S3_ENDPOINT` | Custom endpoint URL (for SeaweedFS, LocalStack) | (AWS default) |
 | `S3_USE_PATH_STYLE` | Use path-style URLs instead of virtual-hosted | `false` |
-| `S3_TIMEOUT` | Operation timeout | `30s` |
+| `S3_TIMEOUT` | Operation timeout. For object reads, covers the request up to the response headers, not the body transfer | `30s` |
+| `S3_READ_IDLE_TIMEOUT` | Longest stall allowed while an object body is being read; a transfer that keeps moving is never cut off | `30s` |
 | `S3_CONNECTION_NAME` | Name for the default connection | (none) |
 
 ## Extension Configuration

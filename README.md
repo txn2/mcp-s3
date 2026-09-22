@@ -143,7 +143,8 @@ Add to your `claude_desktop_config.json` (find via Claude Desktop â†’ Settings â
 | `AWS_PROFILE` | Profile name | (optional) |
 | `S3_ENDPOINT` | Custom endpoint (SeaweedFS) | (AWS default) |
 | `S3_USE_PATH_STYLE` | Path-style URLs | `false` |
-| `S3_TIMEOUT` | Operation timeout | `30s` |
+| `S3_TIMEOUT` | Operation timeout. For object reads, covers the request up to the response headers, not the body transfer | `30s` |
+| `S3_READ_IDLE_TIMEOUT` | Longest stall allowed while an object body is being read; a transfer that keeps moving is never cut off | `30s` |
 
 **Extensions:**
 
