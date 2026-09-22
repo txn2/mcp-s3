@@ -210,10 +210,11 @@ adversarial review (see Development Workflow above):
 make verify
 ```
 
-It writes `.claude/.last-verify-passed`, the short SHA-256 of the working-tree
-diff it passed against. The pre-commit gate compares that hash to the live diff,
-so a verify run only clears the tree it actually ran on. The hash computation
-must stay byte-identical to `compute_diff_hash()` in `~/.claude/hooks/review-gate.sh`.
+It writes `.claude/.last-verify-passed`, the short `git write-tree` hash of the
+working tree it passed against (untracked files included). The pre-commit gate
+compares that hash to the live tree, so a verify run only clears the tree it
+actually ran on. The hash computation must stay identical to
+`compute_diff_hash()` in `~/.claude/hooks/review-gate.sh`.
 
 Individual checks (all must pass):
 ```

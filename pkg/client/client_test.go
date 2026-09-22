@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	neturl "net/url"
 	"os"
 	"strings"
@@ -954,3 +955,222 @@ func TestClearUnresolvedAWSEnvVars(t *testing.T) {
 		}
 	})
 }
+
+func TestClient_GetObjectRange(t *testing.T) {
+	t.Run("sends the range and reports the total size", func(t *testing.T) {
+		var gotRange string
+		mock := &mockS3API{
+			getObjectFunc: func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+				gotRange = aws.ToString(params.Range)
+				return &s3.GetObjectOutput{
+					Body:          io.NopCloser(strings.NewReader("PAR1")),
+					ContentLength: aws.Int64(4),
+					ContentRange:  aws.String("bytes 996-999/1000"),
+					ContentType:   aws.String("application/vnd.apache.parquet"),
+				}, nil
+			},
+		}
+		client := newMockClient(mock, nil)
+
+		result, err := client.GetObjectRange(context.Background(), "b", "f.parquet", 996, 4)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if gotRange != "bytes=996-999" {
+			t.Errorf("expected range bytes=996-999, got %q", gotRange)
+		}
+		if string(result.Body) != "PAR1" {
+			t.Errorf("expected body PAR1, got %q", result.Body)
+		}
+		if result.Size != 1000 {
+			t.Errorf("expected total size 1000, got %d", result.Size)
+		}
+		if result.ContentType != "application/vnd.apache.parquet" {
+			t.Errorf("expected content type to be carried, got %q", result.ContentType)
+		}
+	})
+
+	t.Run("a store that ignores the range yields the bytes at offset and no more", func(t *testing.T) {
+		mock := &mockS3API{
+			getObjectFunc: func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+				return &s3.GetObjectOutput{
+					Body:          io.NopCloser(strings.NewReader("0123456789")),
+					ContentLength: aws.Int64(10),
+				}, nil
+			},
+		}
+		client := newMockClient(mock, nil)
+
+		result, err := client.GetObjectRange(context.Background(), "b", "k", 4, 3)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if string(result.Body) != "456" {
+			t.Errorf("expected body 456, got %q", result.Body)
+		}
+		if result.Size != 10 {
+			t.Errorf("expected size 10 from Content-Length, got %d", result.Size)
+		}
+	})
+
+	t.Run("an unusable range is refused before any request", func(t *testing.T) {
+		called := false
+		mock := &mockS3API{
+			getObjectFunc: func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+				called = true
+				return nil, errors.New("unexpected")
+			},
+		}
+		client := newMockClient(mock, nil)
+		for _, tc := range []struct{ offset, length int64 }{
+			{-1, 4}, {0, 0}, {5, -2}, {1, math.MaxInt64}, {math.MaxInt64, 1},
+		} {
+			_, err := client.GetObjectRange(context.Background(), "b", "k", tc.offset, tc.length)
+			if !errors.Is(err, ErrInvalidRange) {
+				t.Errorf("offset %d length %d: expected ErrInvalidRange, got %v", tc.offset, tc.length, err)
+			}
+		}
+		if called {
+			t.Error("expected no request for an invalid range")
+		}
+	})
+
+	t.Run("the widest representable range is accepted", func(t *testing.T) {
+		var gotRange string
+		mock := &mockS3API{
+			getObjectFunc: func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+				gotRange = aws.ToString(params.Range)
+				return &s3.GetObjectOutput{
+					Body:         io.NopCloser(strings.NewReader("x")),
+					ContentRange: aws.String("bytes 0-0/1"),
+				}, nil
+			},
+		}
+		client := newMockClient(mock, nil)
+		if _, err := client.GetObjectRange(context.Background(), "b", "k", 0, math.MaxInt64); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if want := "bytes=0-9223372036854775806"; gotRange != want {
+			t.Errorf("expected range %s, got %q", want, gotRange)
+		}
+	})
+
+	t.Run("a store error is returned", func(t *testing.T) {
+		mock := &mockS3API{
+			getObjectFunc: func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+				return nil, errors.New("AccessDenied")
+			},
+		}
+		client := newMockClient(mock, nil)
+		_, err := client.GetObjectRange(context.Background(), "b", "k", 100, 4)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if errors.Is(err, ErrRangeNotSatisfiable) {
+			t.Errorf("a non-416 error must not read as an unsatisfiable range: %v", err)
+		}
+	})
+
+	t.Run("a Content-Range that does not start at the offset is an error", func(t *testing.T) {
+		mock := &mockS3API{
+			getObjectFunc: func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+				return &s3.GetObjectOutput{
+					Body:         io.NopCloser(strings.NewReader("0123")),
+					ContentRange: aws.String("bytes 0-3/10"),
+				}, nil
+			},
+		}
+		client := newMockClient(mock, nil)
+		if _, err := client.GetObjectRange(context.Background(), "b", "k", 4, 4); err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
+
+	t.Run("a store that ignores the range reports an offset past the end as unsatisfiable", func(t *testing.T) {
+		tests := []struct {
+			name          string
+			contentLength *int64
+			body          string
+			offset        int64
+		}{
+			{"zero-byte object", aws.Int64(0), "", 0},
+			{"offset at the end", aws.Int64(4), "0123", 4},
+			{"unknown length, body ends before offset", nil, "0123", 9},
+		}
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				mock := &mockS3API{
+					getObjectFunc: func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+						return &s3.GetObjectOutput{Body: io.NopCloser(strings.NewReader(tc.body)), ContentLength: tc.contentLength}, nil
+					},
+				}
+				client := newMockClient(mock, nil)
+				_, err := client.GetObjectRange(context.Background(), "b", "k", tc.offset, 8)
+				if !errors.Is(err, ErrRangeNotSatisfiable) {
+					t.Errorf("expected ErrRangeNotSatisfiable, got %v", err)
+				}
+			})
+		}
+	})
+
+	t.Run("a body that fails mid-read is an error", func(t *testing.T) {
+		tests := []struct {
+			name         string
+			contentRange *string
+			offset       int64
+		}{
+			{"honored range", aws.String("bytes 0-3/10"), 0},
+			{"ignored range, while skipping to offset", nil, 4},
+		}
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				mock := &mockS3API{
+					getObjectFunc: func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+						return &s3.GetObjectOutput{Body: io.NopCloser(&failingReader{}), ContentRange: tc.contentRange}, nil
+					},
+				}
+				client := newMockClient(mock, nil)
+				_, err := client.GetObjectRange(context.Background(), "b", "k", tc.offset, 4)
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if errors.Is(err, ErrRangeNotSatisfiable) {
+					t.Errorf("a failed read must not read as an unsatisfiable range: %v", err)
+				}
+			})
+		}
+	})
+}
+
+func TestParseContentRange(t *testing.T) {
+	tests := []struct {
+		header    string
+		wantStart int64
+		wantTotal int64
+		wantOK    bool
+	}{
+		{"bytes 0-3/1000", 0, 1000, true},
+		{"bytes 996-999/1000", 996, 1000, true},
+		{"bytes 0-3/*", 0, -1, true},
+		{"", 0, 0, false},
+		{"bytes 0-3", 0, 0, false},
+		{"items 0-3/10", 0, 0, false},
+		{"bytes x-3/10", 0, 0, false},
+		{"bytes 03/10", 0, 0, false},
+		{"bytes -1-3/10", 0, 0, false},
+		{"bytes 0-3/ten", 0, 0, false},
+		{"bytes 0-3/-5", 0, 0, false},
+	}
+	for _, tc := range tests {
+		start, total, ok := parseContentRange(tc.header)
+		if ok != tc.wantOK || (ok && (start != tc.wantStart || total != tc.wantTotal)) {
+			t.Errorf("parseContentRange(%q) = (%d, %d, %v), want (%d, %d, %v)",
+				tc.header, start, total, ok, tc.wantStart, tc.wantTotal, tc.wantOK)
+		}
+	}
+}
+
+// failingReader is a body whose read fails, as a connection dropped mid-body does.
+type failingReader struct{}
+
+func (*failingReader) Read([]byte) (int, error) { return 0, errors.New("connection reset") }

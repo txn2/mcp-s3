@@ -34,6 +34,9 @@ s3Client, err := client.New(ctx, &cfg)
 
 buckets, err := s3Client.ListBuckets(ctx)
 content, err := s3Client.GetObject(ctx, "bucket", "key")
+
+// Part of an object: 8 bytes from offset 992. Size is the object's total size.
+tail, err := s3Client.GetObjectRange(ctx, "bucket", "key", 992, 8)
 ```
 
 ### pkg/tools
