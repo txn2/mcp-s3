@@ -10,7 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.36
 	github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager v0.3.13
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.107.2
-	github.com/aws/smithy-go v1.27.8
+	github.com/aws/smithy-go v1.28.5
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	gopkg.in/yaml.v3 v3.0.1
 )
