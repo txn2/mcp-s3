@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,6 +13,9 @@ import (
 
 	mcps3 "github.com/txn2/mcp-s3/internal/server"
 )
+
+// defaultHTTPAddr binds loopback only: the HTTP endpoint has no authentication.
+const defaultHTTPAddr = "127.0.0.1:8080"
 
 func main() {
 	if err := run(); err != nil {
@@ -40,10 +44,28 @@ func run() error {
 	}
 	defer func() { _ = toolkit.Close() }()
 
-	// Start the server using stdio transport
-	if err := mcpServer.Run(ctx, &mcp.StdioTransport{}); err != nil {
+	if err := serve(ctx, mcpServer, os.Getenv("MCP_S3_TRANSPORT"), os.Getenv("MCP_S3_HTTP_ADDR")); err != nil {
 		return fmt.Errorf("server error: %w", err)
 	}
 
 	return nil
+}
+
+// serve runs mcpServer on the selected transport: "stdio" (default) or "http" (streamable HTTP).
+func serve(ctx context.Context, mcpServer *mcp.Server, transport, addr string) error {
+	switch transport {
+	case "", "stdio":
+		return mcpServer.Run(ctx, &mcp.StdioTransport{})
+	case "http":
+		if addr == "" {
+			addr = defaultHTTPAddr
+		}
+		ln, err := net.Listen("tcp", addr)
+		if err != nil {
+			return fmt.Errorf("listening on %s: %w", addr, err)
+		}
+		return mcps3.ServeHTTP(ctx, mcpServer, ln)
+	default:
+		return fmt.Errorf("unknown MCP_S3_TRANSPORT %q (want stdio or http)", transport)
+	}
 }
