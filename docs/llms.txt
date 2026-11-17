@@ -32,7 +32,7 @@ mcp-s3 is a Model Context Protocol server that gives AI assistants safe, structu
 - Multi-account: configure several S3 connections via S3_ADDITIONAL_CONNECTIONS JSON.
 - S3-compatible: works with AWS S3, SeaweedFS, LocalStack, and MinIO via S3_ENDPOINT.
 - Composable Go library: middleware wraps tool execution; interceptors gate or rewrite requests; transformers redact or audit results.
-- Stdio transport: ships as a standard MCP wire-protocol binary, no daemon, no HTTP server.
+- Transports: stdio by default; set MCP_S3_TRANSPORT=http to serve streamable HTTP on MCP_S3_HTTP_ADDR (default 127.0.0.1:8080, unauthenticated).
 
 ## Quick Start
 

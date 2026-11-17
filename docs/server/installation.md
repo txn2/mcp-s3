@@ -52,6 +52,14 @@ go install github.com/txn2/mcp-s3/cmd/mcp-s3@latest
 docker pull txn2/mcp-s3:latest
 ```
 
+The image runs over stdio by default (`docker run -i`). To serve streamable HTTP instead:
+
+```bash
+docker run -p 127.0.0.1:8080:8080 -e MCP_S3_TRANSPORT=http txn2/mcp-s3:latest
+```
+
+The HTTP endpoint has no authentication, so publish the port on `127.0.0.1` only, or put an authenticating proxy in front.
+
 ## Homebrew (macOS/Linux)
 
 ```bash

@@ -45,6 +45,13 @@ export S3_ADDITIONAL_CONNECTIONS='{
 }'
 ```
 
+### Transport
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MCP_S3_TRANSPORT` | `stdio` | `stdio` or `http` (MCP streamable HTTP) |
+| `MCP_S3_HTTP_ADDR` | `127.0.0.1:8080` | Listen address when `MCP_S3_TRANSPORT=http`. The endpoint has no authentication; keep it on loopback or put an authenticating proxy in front |
+
 ### Extensions
 
 | Variable | Default | Description |
